@@ -142,16 +142,23 @@ void AEmberdeepEnemy::BeginPlay()
 
 void AEmberdeepEnemy::ConfigureAsElite()
 {
-	bIsElite = true;
-	HealthComponent->SetMaxHealth(280.0f);
-	AttackDamage = 46.0f;
-	AttackRange = 165.0f;
-	AttackCooldown = 2.25f;
-	AggroRange = 680.0f;
-	GoldDropValue = 30;
-	GetCharacterMovement()->MaxWalkSpeed = 225.0f;
-	SetActorScale3D(FVector(1.25f));
-	ApplyBoneColor(FLinearColor(0.34f, 0.10f, 0.055f));
+	ConfigureForRun(1, true);
+}
+
+void AEmberdeepEnemy::ConfigureForRun(int32 Tier, bool bElite)
+{
+	RunTier = FMath::Max(1, Tier);
+	bIsElite = bElite;
+	const float TierScale = 1.0f + static_cast<float>(RunTier - 1) * 0.22f;
+	HealthComponent->SetMaxHealth((bIsElite ? 280.0f : 92.0f) * TierScale);
+	AttackDamage = (bIsElite ? 46.0f : 18.0f) * (1.0f + static_cast<float>(RunTier - 1) * 0.16f);
+	AttackRange = bIsElite ? 165.0f : 125.0f;
+	AttackCooldown = bIsElite ? 2.25f : 1.15f;
+	AggroRange = bIsElite ? 680.0f : 520.0f;
+	GoldDropValue = FMath::RoundToInt((bIsElite ? 30.0f : 7.0f) * TierScale);
+	GetCharacterMovement()->MaxWalkSpeed = bIsElite ? 225.0f : 265.0f;
+	SetActorScale3D(bIsElite ? FVector(1.25f) : FVector::OneVector);
+	ApplyBoneColor(bIsElite ? FLinearColor(0.34f, 0.10f, 0.055f) : FLinearColor(0.48f, 0.42f, 0.31f));
 }
 
 void AEmberdeepEnemy::Tick(float DeltaSeconds)
@@ -272,7 +279,7 @@ float AEmberdeepEnemy::TakeDamage(
 	{
 		if (AEmberdeepCharacter* Killer = Cast<AEmberdeepCharacter>(DamageCauser))
 		{
-			Killer->AddExperience(bIsElite ? 50 : 20);
+			Killer->AddExperience((bIsElite ? 50 : 20) + (RunTier - 1) * 10);
 		}
 	}
 
@@ -322,6 +329,7 @@ void AEmberdeepEnemy::HandleDeath()
 
 		if (AEmberdeepGameMode* GameMode = GetWorld()->GetAuthGameMode<AEmberdeepGameMode>())
 		{
+			GameMode->SpawnLootForEnemy(DropLocation + FVector(0.0f, 75.0f, 0.0f), bIsElite);
 			GameMode->NotifyEnemyDefeated();
 		}
 	}

@@ -13,6 +13,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Gameplay/EmberdeepHealthComponent.h"
 #include "Gameplay/EmberdeepGameMode.h"
+#include "Gameplay/EmberdeepPlayerState.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
@@ -222,6 +223,18 @@ void AEmberdeepCharacter::Tick(float DeltaSeconds)
 	}
 }
 
+void AEmberdeepCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+	ApplyEquipmentStats();
+}
+
+void AEmberdeepCharacter::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+	ApplyEquipmentStats();
+}
+
 void AEmberdeepCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -255,6 +268,7 @@ void AEmberdeepCharacter::BeginPlay()
 	{
 		SetActorLocation(FVector(0.0f, -430.0f, 85.0f));
 	}
+	ApplyEquipmentStats();
 }
 
 void AEmberdeepCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -426,7 +440,8 @@ void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& Attack
 		return;
 	}
 
-	const float Damage = bHeavyAttack ? 62.0f : 34.0f;
+	const float EquipmentDamage = GetEquipmentDamageBonus();
+	const float Damage = bHeavyAttack ? 62.0f + EquipmentDamage * 1.4f : 34.0f + EquipmentDamage;
 	const float Radius = bHeavyAttack ? 155.0f : 105.0f;
 	const float Reach = bHeavyAttack ? 125.0f : 105.0f;
 	const float KnockbackStrength = bHeavyAttack ? 620.0f : 260.0f;
@@ -541,14 +556,18 @@ float AEmberdeepCharacter::TakeDamage(
 		return 0.0f;
 	}
 
-	return HealthComponent->ApplyDamage(DamageAmount);
+	const float MitigatedDamage = FMath::Max(1.0f, DamageAmount - GetEquipmentArmorBonus());
+	return HealthComponent->ApplyDamage(MitigatedDamage);
 }
 
 void AEmberdeepCharacter::AddGold(int32 Amount)
 {
 	if (HasAuthority())
 	{
-		Gold += FMath::Max(0, Amount);
+		if (AEmberdeepPlayerState* RunState = GetPlayerState<AEmberdeepPlayerState>())
+		{
+			RunState->AddGold(FMath::Max(0, Amount));
+		}
 	}
 }
 
@@ -559,23 +578,55 @@ void AEmberdeepCharacter::AddExperience(int32 Amount)
 		return;
 	}
 
-	CurrentExperience += Amount;
-	while (CurrentExperience >= ExperienceToNextLevel)
+	if (AEmberdeepPlayerState* RunState = GetPlayerState<AEmberdeepPlayerState>())
 	{
-		CurrentExperience -= ExperienceToNextLevel;
-		++CharacterLevel;
-		ExperienceToNextLevel = FMath::RoundToInt(static_cast<float>(ExperienceToNextLevel) * 1.25f);
+		RunState->AddExperience(Amount);
+		UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_PROGRESSION Experience Level=%d"), RunState->GetCharacterLevel());
 	}
+}
 
-	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_PROGRESSION Experience=%d/%d Level=%d"),
-		CurrentExperience, ExperienceToNextLevel, CharacterLevel);
+int32 AEmberdeepCharacter::GetGold() const
+{
+	const AEmberdeepPlayerState* RunState = GetPlayerState<AEmberdeepPlayerState>();
+	return RunState ? RunState->GetGold() : 0;
+}
+
+int32 AEmberdeepCharacter::GetCharacterLevel() const
+{
+	const AEmberdeepPlayerState* RunState = GetPlayerState<AEmberdeepPlayerState>();
+	return RunState ? RunState->GetCharacterLevel() : 1;
 }
 
 float AEmberdeepCharacter::GetExperienceNormalized() const
 {
-	return ExperienceToNextLevel > 0
-		? FMath::Clamp(static_cast<float>(CurrentExperience) / static_cast<float>(ExperienceToNextLevel), 0.0f, 1.0f)
-		: 0.0f;
+	const AEmberdeepPlayerState* RunState = GetPlayerState<AEmberdeepPlayerState>();
+	return RunState ? RunState->GetExperienceNormalized() : 0.0f;
+}
+
+float AEmberdeepCharacter::GetEquipmentDamageBonus() const
+{
+	const AEmberdeepPlayerState* RunState = GetPlayerState<AEmberdeepPlayerState>();
+	return RunState ? RunState->GetTotalDamageBonus() : 0.0f;
+}
+
+float AEmberdeepCharacter::GetEquipmentArmorBonus() const
+{
+	const AEmberdeepPlayerState* RunState = GetPlayerState<AEmberdeepPlayerState>();
+	return RunState ? RunState->GetTotalArmorBonus() : 0.0f;
+}
+
+void AEmberdeepCharacter::ApplyEquipmentStats()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	if (AEmberdeepPlayerState* RunState = GetPlayerState<AEmberdeepPlayerState>())
+	{
+		HealthComponent->SetMaxHealth(190.0f + RunState->GetTotalMaxHealthBonus(), true);
+		UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_EQUIPMENT Applied Damage=%.1f Health=%.1f Armor=%.1f"),
+			RunState->GetTotalDamageBonus(), RunState->GetTotalMaxHealthBonus(), RunState->GetTotalArmorBonus());
+	}
 }
 
 float AEmberdeepCharacter::GetDodgeCooldownNormalized() const
@@ -609,9 +660,5 @@ void AEmberdeepCharacter::HandleDeath()
 void AEmberdeepCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(AEmberdeepCharacter, Gold);
-	DOREPLIFETIME(AEmberdeepCharacter, CharacterLevel);
-	DOREPLIFETIME(AEmberdeepCharacter, CurrentExperience);
-	DOREPLIFETIME(AEmberdeepCharacter, ExperienceToNextLevel);
 	DOREPLIFETIME(AEmberdeepCharacter, ReplicatedAimDirection);
 }

@@ -40,7 +40,7 @@ private:
 	UFUNCTION()
 	void OnRep_CurrentHealth(float PreviousHealth);
 
-	UPROPERTY(EditDefaultsOnly, Category = "Health", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Health", meta = (ClampMin = "1.0"))
 	float MaxHealth = 100.0f;
 
 	UPROPERTY(ReplicatedUsing = OnRep_CurrentHealth)

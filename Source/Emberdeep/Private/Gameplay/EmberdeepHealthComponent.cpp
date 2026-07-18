@@ -57,5 +57,6 @@ void UEmberdeepHealthComponent::OnRep_CurrentHealth(float PreviousHealth)
 void UEmberdeepHealthComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(UEmberdeepHealthComponent, MaxHealth);
 	DOREPLIFETIME(UEmberdeepHealthComponent, CurrentHealth);
 }

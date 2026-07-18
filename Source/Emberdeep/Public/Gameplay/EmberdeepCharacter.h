@@ -18,19 +18,28 @@ class EMBERDEEP_API AEmberdeepCharacter : public ACharacter
 public:
 	AEmberdeepCharacter();
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void PossessedBy(AController* NewController) override;
+	virtual void OnRep_PlayerState() override;
 	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
 	void AddGold(int32 Amount);
 	void AddExperience(int32 Amount);
+	void ApplyEquipmentStats();
 
 	UFUNCTION(BlueprintPure, Category = "Combat")
 	UEmberdeepHealthComponent* GetHealthComponent() const { return HealthComponent; }
 
 	UFUNCTION(BlueprintPure, Category = "Loot")
-	int32 GetGold() const { return Gold; }
+	int32 GetGold() const;
 
 	UFUNCTION(BlueprintPure, Category = "Progression")
-	int32 GetCharacterLevel() const { return CharacterLevel; }
+	int32 GetCharacterLevel() const;
+
+	UFUNCTION(BlueprintPure, Category = "Equipment")
+	float GetEquipmentDamageBonus() const;
+
+	UFUNCTION(BlueprintPure, Category = "Equipment")
+	float GetEquipmentArmorBonus() const;
 
 	UFUNCTION(BlueprintPure, Category = "Progression")
 	float GetExperienceNormalized() const;
@@ -114,18 +123,6 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Camera|Zoom")
 	float ZoomInterpolationSpeed = 10.0f;
-
-	UPROPERTY(Replicated)
-	int32 Gold = 0;
-
-	UPROPERTY(Replicated)
-	int32 CharacterLevel = 1;
-
-	UPROPERTY(Replicated)
-	int32 CurrentExperience = 0;
-
-	UPROPERTY(Replicated)
-	int32 ExperienceToNextLevel = 100;
 
 	UPROPERTY(ReplicatedUsing = OnRep_AimDirection)
 	FVector_NetQuantizeNormal ReplicatedAimDirection = FVector::ForwardVector;

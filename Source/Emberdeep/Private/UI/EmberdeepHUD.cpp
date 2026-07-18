@@ -10,6 +10,7 @@
 #include "Gameplay/EmberdeepGameMode.h"
 #include "Gameplay/EmberdeepGameState.h"
 #include "Gameplay/EmberdeepHealthComponent.h"
+#include "Gameplay/EmberdeepPlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -45,6 +46,18 @@ void AEmberdeepHUD::DrawHUD()
 	DrawPartyRoster();
 	DrawMinimapAndObjective();
 	DrawActionBar(Character);
+
+	FString InteractionPrompt;
+	if (const AEmberdeepPlayerController* EmberdeepController = Cast<AEmberdeepPlayerController>(PlayerOwner);
+		EmberdeepController && EmberdeepController->GetClosestInteractionPrompt(InteractionPrompt))
+	{
+		float PromptWidth = 0.0f;
+		float PromptHeight = 0.0f;
+		const FString Prompt = FString::Printf(TEXT("[F]  %s"), *InteractionPrompt);
+		GetTextSize(Prompt, PromptWidth, PromptHeight, GEngine->GetSmallFont(), 1.05f);
+		DrawPanel(Canvas->ClipX * 0.5f - PromptWidth * 0.5f - 16.0f, Canvas->ClipY * 0.70f - 8.0f, PromptWidth + 32.0f, 32.0f);
+		DrawCenteredText(Prompt, FLinearColor(1.0f, 0.70f, 0.25f), Canvas->ClipX * 0.5f, Canvas->ClipY * 0.70f, GEngine->GetSmallFont(), 1.05f);
+	}
 
 	TArray<AActor*> Enemies;
 	UGameplayStatics::GetAllActorsOfClass(this, AEmberdeepEnemy::StaticClass(), Enemies);
@@ -137,11 +150,15 @@ void AEmberdeepHUD::DrawMinimapAndObjective()
 	DrawRect(FLinearColor(0.035f, 0.035f, 0.038f, 0.92f), MapX + 11.0f, MapY + 16.0f, MapWidth - 22.0f, MapHeight - 32.0f);
 	DrawRect(FLinearColor(0.16f, 0.16f, 0.17f, 0.95f), MapX + 24.0f, MapY + 31.0f, MapWidth - 48.0f, MapHeight - 62.0f);
 
-	const auto WorldToMap = [MapX, MapY, MapWidth, MapHeight](const FVector& WorldLocation)
+	const AEmberdeepGameState* EmberdeepGameState = GetWorld()->GetGameState<AEmberdeepGameState>();
+	const EEmberdeepRunStage Stage = EmberdeepGameState ? EmberdeepGameState->GetRunStage() : EEmberdeepRunStage::Camp;
+	const float WorldHalfWidth = Stage == EEmberdeepRunStage::RewardRoom ? 600.0f : 900.0f;
+	const float WorldHalfHeight = Stage == EEmberdeepRunStage::RewardRoom ? 450.0f : 700.0f;
+	const auto WorldToMap = [MapX, MapY, MapWidth, MapHeight, WorldHalfWidth, WorldHalfHeight](const FVector& WorldLocation)
 	{
 		return FVector2D(
-			MapX + 24.0f + FMath::Clamp((WorldLocation.X + 900.0f) / 1800.0f, 0.0f, 1.0f) * (MapWidth - 48.0f),
-			MapY + 31.0f + FMath::Clamp((WorldLocation.Y + 700.0f) / 1400.0f, 0.0f, 1.0f) * (MapHeight - 62.0f));
+			MapX + 24.0f + FMath::Clamp((WorldLocation.X + WorldHalfWidth) / (WorldHalfWidth * 2.0f), 0.0f, 1.0f) * (MapWidth - 48.0f),
+			MapY + 31.0f + FMath::Clamp((WorldLocation.Y + WorldHalfHeight) / (WorldHalfHeight * 2.0f), 0.0f, 1.0f) * (MapHeight - 62.0f));
 	};
 
 	if (const AGameStateBase* GameState = GetWorld()->GetGameState<AGameStateBase>())
@@ -164,14 +181,36 @@ void AEmberdeepHUD::DrawMinimapAndObjective()
 		DrawRect(FLinearColor(0.88f, 0.055f, 0.025f), Marker.X - 2.0f, Marker.Y - 2.0f, 4.0f, 4.0f);
 	}
 
-	DrawText(TEXT("THE BONE WARDEN"), FLinearColor(0.95f, 0.62f, 0.20f), MapX, MapY + MapHeight + 16.0f, GEngine->GetSmallFont(), 1.0f, false);
-	DrawText(TEXT("Defeat the arena skeletons"), FLinearColor(0.82f, 0.80f, 0.74f), MapX, MapY + MapHeight + 39.0f, GEngine->GetSmallFont(), 0.9f, false);
+	FString ObjectiveTitle;
+	FString ObjectiveText;
+	FString StatusText;
+	bool bObjectiveComplete = false;
+	if (Stage == EEmberdeepRunStage::Camp)
+	{
+		ObjectiveTitle = TEXT("DESCEND INTO EMBERDEEP");
+		ObjectiveText = TEXT("Enter the Ashen Crypt");
+		StatusText = TEXT("F: portal   I: inventory");
+	}
+	else if (Stage == EEmberdeepRunStage::RewardRoom)
+	{
+		ObjectiveTitle = TEXT("THE CINDER VAULT");
+		ObjectiveText = TEXT("Claim your legendary reward");
+		StatusText = TEXT("Return to camp when ready");
+		bObjectiveComplete = true;
+	}
+	else
+	{
+		ObjectiveTitle = FString::Printf(TEXT("ASHEN CRYPT  -  TIER %d"), EmberdeepGameState ? EmberdeepGameState->GetRunTier() : 1);
+		ObjectiveText = TEXT("Defeat the crypt guardians");
+		bObjectiveComplete = EmberdeepGameState && EmberdeepGameState->IsEncounterComplete();
+		StatusText = bObjectiveComplete ? TEXT("Cinder Vault unlocked") : FString::Printf(TEXT("Enemies remaining: %d"), EmberdeepGameState ? EmberdeepGameState->GetRemainingEnemies() : 0);
+	}
 
-	const AEmberdeepGameState* EmberdeepGameState = GetWorld()->GetGameState<AEmberdeepGameState>();
-	const bool bComplete = EmberdeepGameState && EmberdeepGameState->IsEncounterComplete();
-	DrawRect(bComplete ? FLinearColor(0.82f, 0.55f, 0.12f) : FLinearColor(0.14f, 0.13f, 0.12f), MapX, MapY + MapHeight + 65.0f, 12.0f, 12.0f);
+	DrawText(ObjectiveTitle, FLinearColor(0.95f, 0.62f, 0.20f), MapX, MapY + MapHeight + 16.0f, GEngine->GetSmallFont(), 1.0f, false);
+	DrawText(ObjectiveText, FLinearColor(0.82f, 0.80f, 0.74f), MapX, MapY + MapHeight + 39.0f, GEngine->GetSmallFont(), 0.9f, false);
+	DrawRect(bObjectiveComplete ? FLinearColor(0.82f, 0.55f, 0.12f) : FLinearColor(0.14f, 0.13f, 0.12f), MapX, MapY + MapHeight + 65.0f, 12.0f, 12.0f);
 	DrawText(
-		bComplete ? TEXT("Arena cleared") : TEXT("Bone Warden remains"),
+		StatusText,
 		FLinearColor(0.76f, 0.74f, 0.68f),
 		MapX + 21.0f,
 		MapY + MapHeight + 62.0f,
@@ -320,7 +359,8 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 		GEngine->GetSmallFont(),
 		FMath::Clamp(Scale * 1.55f, 0.62f, 0.86f));
 	DrawCenteredText(
-		FString::Printf(TEXT("LEVEL %d     GOLD %d"), Character->GetCharacterLevel(), Character->GetGold()),
+		FString::Printf(TEXT("LEVEL %d     GOLD %d     DAMAGE +%.0f     ARMOR +%.0f     [I] INVENTORY"),
+			Character->GetCharacterLevel(), Character->GetGold(), Character->GetEquipmentDamageBonus(), Character->GetEquipmentArmorBonus()),
 		FLinearColor(1.0f, 0.66f, 0.16f),
 		Canvas->ClipX * 0.5f,
 		HudY + 463.0f * Scale,

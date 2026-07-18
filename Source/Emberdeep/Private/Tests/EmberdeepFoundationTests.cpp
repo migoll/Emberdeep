@@ -4,6 +4,8 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Environment/EmberdeepCampEnvironment.h"
+#include "Environment/EmberdeepDungeonEnvironment.h"
+#include "Environment/EmberdeepRewardRoomEnvironment.h"
 #include "Misc/AutomationTest.h"
 #include "Gameplay/EmberdeepCharacter.h"
 #include "Gameplay/EmberdeepEnemy.h"
@@ -11,7 +13,14 @@
 #include "Gameplay/EmberdeepGameState.h"
 #include "Gameplay/EmberdeepGoldPickup.h"
 #include "Gameplay/EmberdeepHealthComponent.h"
+#include "Gameplay/EmberdeepItemTypes.h"
+#include "Gameplay/EmberdeepLootContainer.h"
+#include "Gameplay/EmberdeepPlayerController.h"
+#include "Gameplay/EmberdeepPlayerState.h"
+#include "Gameplay/EmberdeepPortal.h"
 #include "UI/EmberdeepHUD.h"
+#include "UI/EmberdeepInventoryWidget.h"
+#include "UI/EmberdeepLootWidget.h"
 #include "UI/EmberdeepMainMenuWidget.h"
 #include "Visual/EmberdeepVoxelStyle.h"
 
@@ -77,6 +86,26 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 	TestNotNull(TEXT("The combat HUD must exist"), AEmberdeepHUD::StaticClass());
 	TestNotNull(TEXT("The Broken Caravan Camp environment must exist"), AEmberdeepCampEnvironment::StaticClass());
 	TestNotNull(TEXT("The Host/Join menu must exist"), UEmberdeepMainMenuWidget::StaticClass());
+	TestNotNull(TEXT("The Ashen Crypt environment must exist"), AEmberdeepDungeonEnvironment::StaticClass());
+	TestNotNull(TEXT("The Cinder Vault environment must exist"), AEmberdeepRewardRoomEnvironment::StaticClass());
+	TestNotNull(TEXT("The portal interaction must exist"), AEmberdeepPortal::StaticClass());
+	TestNotNull(TEXT("Shared loot containers must exist"), AEmberdeepLootContainer::StaticClass());
+	TestNotNull(TEXT("Run-persistent player state must exist"), AEmberdeepPlayerState::StaticClass());
+	TestNotNull(TEXT("The loot window must exist"), UEmberdeepLootWidget::StaticClass());
+	TestNotNull(TEXT("The inventory window must exist"), UEmberdeepInventoryWidget::StaticClass());
+	TestTrue(
+		TEXT("The GameMode must use run-persistent PlayerState"),
+		AEmberdeepGameMode::StaticClass()->GetDefaultObject<AEmberdeepGameMode>()->PlayerStateClass ==
+			AEmberdeepPlayerState::StaticClass());
+	TestNotNull(
+		TEXT("Interaction must enter through an owned server RPC"),
+		AEmberdeepPlayerController::StaticClass()->FindFunctionByName(TEXT("ServerInteract")));
+	TestNotNull(
+		TEXT("Loot claims must enter through an owned server RPC"),
+		AEmberdeepPlayerController::StaticClass()->FindFunctionByName(TEXT("ServerTakeLoot")));
+	TestNotNull(
+		TEXT("Equipment changes must enter through an owned server RPC"),
+		AEmberdeepPlayerController::StaticClass()->FindFunctionByName(TEXT("ServerEquipItem")));
 	TestNotNull(
 		TEXT("Attacks must enter through a server RPC"),
 		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("ServerPerformAttack")));
@@ -161,6 +190,26 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 	TestTrue(
 		TEXT("Every gold cell must use the shared 4 cm lattice"),
 		ValidateFixedVoxelMeshes(*this, TEXT("Gold pickup"), GoldVoxelMeshes));
+
+	const AEmberdeepDungeonEnvironment* DungeonDefault =
+		AEmberdeepDungeonEnvironment::StaticClass()->GetDefaultObject<AEmberdeepDungeonEnvironment>();
+	TestEqual(TEXT("The dungeon uses a restricted palette"), DungeonDefault->GetPaletteMeshCount(), 8);
+	TestTrue(TEXT("The dungeon retains readable dressing"), DungeonDefault->GetVisualBlockCount() >= 400);
+	TestEqual(TEXT("The dungeon uses only floor/perimeter collision"), DungeonDefault->GetCollisionProxyCount(), 5);
+
+	const AEmberdeepRewardRoomEnvironment* RewardDefault =
+		AEmberdeepRewardRoomEnvironment::StaticClass()->GetDefaultObject<AEmberdeepRewardRoomEnvironment>();
+	TestEqual(TEXT("The reward room uses a restricted palette"), RewardDefault->GetPaletteMeshCount(), 9);
+	TestTrue(TEXT("The reward room retains readable dressing"), RewardDefault->GetVisualBlockCount() >= 200);
+	TestEqual(TEXT("The reward room uses only floor/perimeter collision"), RewardDefault->GetCollisionProxyCount(), 5);
+
+	const AEmberdeepPlayerState* RunStateDefault =
+		AEmberdeepPlayerState::StaticClass()->GetDefaultObject<AEmberdeepPlayerState>();
+	TestEqual(TEXT("The bounded prototype inventory has twelve slots"), RunStateDefault->GetInventoryCapacity(), 12);
+	const FEmberdeepItemInstance Legendary = FEmberdeepItemCatalog::MakeLegendaryReward(99, 3);
+	TestTrue(TEXT("The final chest reward is a valid item"), Legendary.IsValid());
+	TestEqual(TEXT("The final chest reward is legendary"), Legendary.Rarity, EEmberdeepItemRarity::Legendary);
+	TestTrue(TEXT("The legendary reward materially increases damage"), Legendary.DamageBonus >= 30.0f);
 	return true;
 }
 

@@ -19,6 +19,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 	void ConfigureAsElite();
+	void ConfigureForRun(int32 Tier, bool bElite);
 
 	UEmberdeepHealthComponent* GetHealthComponent() const { return HealthComponent; }
 	bool IsElite() const { return bIsElite; }
@@ -64,5 +65,6 @@ private:
 	bool bIsElite = false;
 	bool bAttackWindingUp = false;
 	int32 GoldDropValue = 7;
+	int32 RunTier = 1;
 	TWeakObjectPtr<ACharacter> PendingAttackTarget;
 };

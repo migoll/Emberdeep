@@ -20,10 +20,35 @@ void AEmberdeepGameState::SetRemainingEnemies(int32 NewRemainingEnemies)
 	}
 }
 
+void AEmberdeepGameState::SetRunStage(EEmberdeepRunStage NewStage)
+{
+	if (HasAuthority())
+	{
+		RunStage = NewStage;
+	}
+}
+
+void AEmberdeepGameState::SetRunTier(int32 NewTier)
+{
+	if (HasAuthority())
+	{
+		RunTier = FMath::Max(1, NewTier);
+	}
+}
+
+void AEmberdeepGameState::SetRewardAvailable(bool bNewRewardAvailable)
+{
+	if (HasAuthority())
+	{
+		bRewardAvailable = bNewRewardAvailable;
+	}
+}
+
 void AEmberdeepGameState::OnRep_EncounterState()
 {
-	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_ENCOUNTER Replicated Remaining=%d Started=%s"),
-		RemainingEnemies, bEncounterStarted ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_RUN Replicated Stage=%s Tier=%d Remaining=%d Reward=%s"),
+		*EmberdeepRunStageName(RunStage), RunTier, RemainingEnemies,
+		bRewardAvailable ? TEXT("true") : TEXT("false"));
 }
 
 void AEmberdeepGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -31,4 +56,7 @@ void AEmberdeepGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AEmberdeepGameState, RemainingEnemies);
 	DOREPLIFETIME(AEmberdeepGameState, bEncounterStarted);
+	DOREPLIFETIME(AEmberdeepGameState, RunStage);
+	DOREPLIFETIME(AEmberdeepGameState, RunTier);
+	DOREPLIFETIME(AEmberdeepGameState, bRewardAvailable);
 }

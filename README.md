@@ -8,20 +8,28 @@ The core loop is:
 
 ## Current phase
 
-Phase 0B is active. The current build proves authoritative direct-IP co-op for
-two to five players in the Broken Caravan Camp encounter. It does not include
-accounts, matchmaking, relay hosting, persistence, or public servers.
+Phase 0B remains active, with a deliberately bounded Phase 2 progression slice
+pulled forward for playtesting. The current build proves authoritative direct-IP
+co-op for two to five players across a short Camp -> Ashen Crypt -> Cinder Vault
+run. Progress survives death and room transitions for the hosted run, but is not
+saved to disk. There are no accounts, matchmaking, relay hosts, or public servers.
 
 The current slice contains:
 
-- a generated Broken Caravan Camp arena assembled from a reusable voxel kit;
+- a peaceful generated Broken Caravan Camp assembled from a reusable voxel kit;
+- an Ashen Crypt combat room and a visually distinct Cinder Vault reward room;
+- party-wide portals that move every connected player between run stages;
 - fixed orthographic near-isometric camera;
 - playable code-instanced Thorgrim visual with a chunky voxel-built silhouette;
 - screen-relative WASD movement and invulnerable dodge;
 - basic and heavy melee attacks with cooldowns and knockback;
-- two skeletons and an elite Bone Warden with proximity aggro and a telegraphed slam;
+- two skeletons and a tier-scaled elite Bone Warden with proximity aggro and a telegraphed slam;
 - health, death, automatic encounter restart, enemy hit flashes, and defeat feedback;
-- dropped gold pickups and victory tracking;
+- dropped gold plus server-owned enemy, cache, and reward-chest loot;
+- `F` interaction prompts and a shared WoW-style clickable loot window;
+- a twelve-slot `I` inventory with weapon, armor, and trinket equipment;
+- equipped damage, maximum-health, and armor bonuses that affect real combat;
+- a guaranteed legendary reward at the end of each run and increasing run tiers;
 - replicated level and experience rewards;
 - a dark-fantasy HUD with dynamic party roster, minimap/objective panel, enemy health,
   health/dodge orbs, action bar, cooldown state, experience, and gold;
@@ -38,7 +46,20 @@ The current slice contains:
 - Right mouse or `E`: heavy attack hook
 - Left Shift: dodge hook
 - Mouse wheel: smooth camera zoom
+- `F`: use a nearby portal, corpse drop, cache, or reward chest
+- `I`: open inventory and click an item to equip it
 - `Escape`: quit standalone test
+
+## Progression run test
+
+1. Host the game and walk to the purple camp portal.
+2. Press `F`; the whole party enters the Ashen Crypt and the encounter begins.
+3. Kill a skeleton, walk to its drop, press `F`, then click an item to take it.
+4. Press `I` and click the item to equip it. The HUD damage/armor values update.
+5. Open the Crypt Cache, clear the Bone Warden, and use the unlocked vault portal.
+6. Open the Cinder Vault reliquary for one guaranteed legendary item.
+7. Return to camp. The next descent is a higher tier, and inventory, equipment,
+   gold, level, and experience remain for the hosted run.
 
 ## Multiplayer test
 

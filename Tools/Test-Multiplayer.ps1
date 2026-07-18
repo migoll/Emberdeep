@@ -13,7 +13,7 @@ $Processes = @()
 
 try {
     $ProjectArgument = '"' + $Project + '"'
-    $Server = Start-Process -FilePath $UnrealEditor -ArgumentList "$ProjectArgument /Engine/Maps/Entry?listen -server -unattended -nosplash -nullrhi -port=7777 -SkipMainMenu -abslog=$ServerLog" -WindowStyle Hidden -PassThru
+    $Server = Start-Process -FilePath $UnrealEditor -ArgumentList "$ProjectArgument /Engine/Maps/Entry?listen -server -unattended -nosplash -nullrhi -port=7777 -SkipMainMenu -AutoRunSmoke -AutoLootSmoke -abslog=$ServerLog" -WindowStyle Hidden -PassThru
     $Processes += $Server
     Start-Sleep -Seconds 7
 
@@ -32,8 +32,10 @@ try {
     $ClientText = Get-Content -Raw $ClientTwoLog
     $Checks = [ordered]@{
         TwoPlayersJoined = $ServerText -match "PlayerJoined.+Players=2"
-        EncounterReplicated = $ClientText -match "EMBERDEEP_ENCOUNTER Replicated Remaining=3"
+        DungeonStageReplicated = $ClientText -match "EMBERDEEP_RUN Replicated Stage=THE ASHEN CRYPT.+Remaining=3"
+        LootClaimAndEquip = $ServerText -match "EMBERDEEP_LOOT AutoLootEquipped.+Inventory=3.+Damage="
         PlayerRespawned = $ServerText -match "EMBERDEEP_NETWORK PlayerRespawned"
+        RunInventorySurvivedRespawn = $ServerText -match "PlayerRespawned.+Inventory=3"
         DisconnectCleaned = $ServerText -match "PlayerLeft.+Players=1"
     }
 

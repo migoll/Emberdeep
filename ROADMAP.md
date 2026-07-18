@@ -33,6 +33,13 @@ Includes four complete kits and readable co-op combat. Excludes progression syst
 
 ## Phase 2 - Dungeon run and loot progression
 
+Status: a bounded vertical slice was intentionally pulled forward by product
+direction while Phase 0B remote repetition remains active. Camp -> dungeon ->
+reward-room routing, enemy/cache/chest loot, a twelve-slot run inventory,
+equipment bonuses, a guaranteed legendary, and rising run tiers are playable.
+State currently persists only through death and room transitions in one hosted
+session; content scale, bosses, disk persistence, and a full loot table remain.
+
 Question: Does kill-loot-grow-deeper remain satisfying across a complete short run?
 
 Includes several encounters, boss, lightweight inventory/equipment, reward room, and difficulty tiers.
