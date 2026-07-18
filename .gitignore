@@ -1,0 +1,27 @@
+# Unreal generated files
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+.vs/
+*.VC.db
+*.VC.opendb
+*.sln
+
+# User/editor state
+*.suo
+*.user
+*.userprefs
+.vscode/
+.idea/
+
+# Build output
+Build/Receipts/
+Build/Windows/FileOpenOrder/
+StagedBuilds/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
