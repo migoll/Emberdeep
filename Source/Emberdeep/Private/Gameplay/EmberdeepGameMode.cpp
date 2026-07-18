@@ -46,7 +46,7 @@ void AEmberdeepGameMode::SpawnCombatEncounter()
 	const TArray<FVector> EnemyLocations = {
 		FVector(-620.0f, -360.0f, 110.0f),
 		FVector(640.0f, 330.0f, 110.0f),
-		FVector(0.0f, 690.0f, 110.0f)};
+		FVector(0.0f, 500.0f, 110.0f)};
 
 	FActorSpawnParameters SpawnParameters;
 	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
@@ -86,20 +86,24 @@ void AEmberdeepGameMode::SpawnBlockoutArena()
 		false);
 	SpawnBlock(FVector(0.0f, 0.0f, -35.0f), FVector(18.0f, 14.0f, 0.6f), FloorColor);
 
-	SpawnBlock(FVector(0.0f, 1390.0f, 75.0f), FVector(18.0f, 0.45f, 1.6f), WallColor);
-	SpawnBlock(FVector(0.0f, -1390.0f, 75.0f), FVector(18.0f, 0.45f, 1.6f), WallColor);
-	SpawnBlock(FVector(1790.0f, 0.0f, 75.0f), FVector(0.45f, 13.5f, 1.6f), WallColor);
-	SpawnBlock(FVector(-1790.0f, 0.0f, 75.0f), FVector(0.45f, 13.5f, 1.6f), WallColor);
+	// Low curbs share the floor's exact outer dimensions. Tall replacement walls
+	// can later sit on these footprints without changing gameplay collision.
+	// The engine cube is 100 units wide, so this floor's half-extents are
+	// 900 x 700. Each curb ends exactly on that outer edge.
+	SpawnBlock(FVector(0.0f, 680.0f, 32.5f), FVector(18.0f, 0.40f, 0.75f), WallColor);
+	SpawnBlock(FVector(0.0f, -680.0f, 32.5f), FVector(18.0f, 0.40f, 0.75f), WallColor);
+	SpawnBlock(FVector(880.0f, 0.0f, 32.5f), FVector(0.40f, 13.2f, 0.75f), WallColor);
+	SpawnBlock(FVector(-880.0f, 0.0f, 32.5f), FVector(0.40f, 13.2f, 0.75f), WallColor);
 
 	// Gameplay boundaries do not depend on the current wall art or imported camp kit.
-	SpawnBoundary(FVector(0.0f, 1355.0f, 115.0f), FVector(1800.0f, 55.0f, 180.0f));
-	SpawnBoundary(FVector(0.0f, -1355.0f, 115.0f), FVector(1800.0f, 55.0f, 180.0f));
-	SpawnBoundary(FVector(1755.0f, 0.0f, 115.0f), FVector(55.0f, 1350.0f, 180.0f));
-	SpawnBoundary(FVector(-1755.0f, 0.0f, 115.0f), FVector(55.0f, 1350.0f, 180.0f));
+	SpawnBoundary(FVector(0.0f, 680.0f, 95.0f), FVector(900.0f, 20.0f, 140.0f));
+	SpawnBoundary(FVector(0.0f, -680.0f, 95.0f), FVector(900.0f, 20.0f, 140.0f));
+	SpawnBoundary(FVector(880.0f, 0.0f, 95.0f), FVector(20.0f, 660.0f, 140.0f));
+	SpawnBoundary(FVector(-880.0f, 0.0f, 95.0f), FVector(20.0f, 660.0f, 140.0f));
 
 	for (const FVector PillarLocation : {
-		FVector(-950.0f, -720.0f, 120.0f), FVector(-950.0f, 720.0f, 120.0f),
-		FVector(950.0f, -720.0f, 120.0f), FVector(950.0f, 720.0f, 120.0f)})
+		FVector(-867.5f, -667.5f, 120.0f), FVector(-867.5f, 667.5f, 120.0f),
+		FVector(867.5f, -667.5f, 120.0f), FVector(867.5f, 667.5f, 120.0f)})
 	{
 		SpawnBlock(PillarLocation, FVector(0.65f, 0.65f, 2.5f), PillarColor);
 	}
@@ -140,8 +144,8 @@ void AEmberdeepGameMode::SpawnBlockoutArena()
 	}
 
 	for (const FVector TorchLocation : {
-		FVector(-950.0f, -720.0f, 210.0f), FVector(-950.0f, 720.0f, 210.0f),
-		FVector(950.0f, -720.0f, 210.0f), FVector(950.0f, 720.0f, 210.0f)})
+		FVector(-700.0f, -500.0f, 210.0f), FVector(-700.0f, 500.0f, 210.0f),
+		FVector(700.0f, -500.0f, 210.0f), FVector(700.0f, 500.0f, 210.0f)})
 	{
 		APointLight* Torch = GetWorld()->SpawnActor<APointLight>(TorchLocation, FRotator::ZeroRotator);
 		if (Torch)
