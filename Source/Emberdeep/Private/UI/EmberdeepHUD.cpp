@@ -17,6 +17,10 @@ AEmberdeepHUD::AEmberdeepHUD()
 	static ConstructorHelpers::FObjectFinder<UTexture2D> OrnamentTexture(
 		TEXT("/Game/Emberdeep/UI/T_HUDOrnaments.T_HUDOrnaments"));
 	HudOrnaments = OrnamentTexture.Object;
+
+	static ConstructorHelpers::FObjectFinder<UTexture2D> ConnectedHudTexture(
+		TEXT("/Game/Emberdeep/UI/T_ConnectedCombatHUD.T_ConnectedCombatHUD"));
+	ConnectedCombatHud = ConnectedHudTexture.Object;
 }
 
 void AEmberdeepHUD::DrawHUD()
@@ -173,45 +177,100 @@ void AEmberdeepHUD::DrawMinimapAndObjective()
 
 void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 {
-	const float OrbRadius = 62.0f;
-	const float BottomY = Canvas->ClipY - 16.0f;
-	const FVector2D HealthCenter(82.0f, BottomY - OrbRadius);
-	const FVector2D DodgeCenter(Canvas->ClipX - 82.0f, BottomY - OrbRadius);
-	DrawOrnamentSection(HealthCenter.X - OrbRadius, HealthCenter.Y - OrbRadius, OrbRadius * 2.0f, OrbRadius * 2.0f, 20.0f, 600.0f, 290.0f, 320.0f);
-	DrawOrnamentSection(DodgeCenter.X - OrbRadius, DodgeCenter.Y - OrbRadius, OrbRadius * 2.0f, OrbRadius * 2.0f, 1180.0f, 585.0f, 345.0f, 335.0f);
-	// The authored bezel has a deliberately opaque dark socket. Draw the live
-	// liquid afterward, kept inside the inner bronze ring.
-	DrawOrb(HealthCenter, 39.0f, Character->GetHealthComponent()->GetHealthNormalized(), FLinearColor(0.72f, 0.018f, 0.012f));
-	DrawOrb(DodgeCenter, 39.0f, Character->GetDodgeCooldownNormalized(), FLinearColor(0.025f, 0.25f, 0.82f));
-
-	DrawCenteredText(
-		FString::Printf(TEXT("%.0f/%.0f"), Character->GetHealthComponent()->GetCurrentHealth(), Character->GetHealthComponent()->GetMaxHealth()),
-		FLinearColor::White, HealthCenter.X, BottomY - 10.0f, GEngine->GetSmallFont(), 0.78f);
-	DrawCenteredText(TEXT("DODGE"), FLinearColor(0.68f, 0.82f, 1.0f), DodgeCenter.X, BottomY - 10.0f, GEngine->GetSmallFont(), 0.78f);
-
-	const float BarWidth = 470.0f;
-	const float BarHeight = 92.0f;
-	const float BarX = (Canvas->ClipX - BarWidth) * 0.5f;
-	const float BarY = Canvas->ClipY - BarHeight - 13.0f;
-	DrawPanel(BarX, BarY, BarWidth, BarHeight);
-
-	const TCHAR* AbilityNames[] = {TEXT("BASIC"), TEXT("HEAVY"), TEXT("DODGE"), TEXT("ABILITY"), TEXT("ABILITY")};
-	const TCHAR* AbilityKeys[] = {TEXT("LMB"), TEXT("RMB"), TEXT("SHIFT"), TEXT("Q"), TEXT("E")};
-	const FLinearColor AbilityColors[] = {
-		FLinearColor(0.92f, 0.30f, 0.025f), FLinearColor(0.68f, 0.11f, 0.02f),
-		FLinearColor(0.12f, 0.42f, 0.88f), FLinearColor(0.16f, 0.14f, 0.18f), FLinearColor(0.16f, 0.14f, 0.18f)};
-	for (int32 SlotIndex = 0; SlotIndex < 5; ++SlotIndex)
+	constexpr float DesignWidth = 1744.0f;
+	constexpr float DesignHeight = 362.0f;
+	const float TargetWidth = FMath::Clamp(Canvas->ClipX * 0.72f, 620.0f, 980.0f);
+	const float Scale = TargetWidth / DesignWidth;
+	const float HudWidth = DesignWidth * Scale;
+	const float HudHeight = DesignHeight * Scale;
+	const float HudX = (Canvas->ClipX - HudWidth) * 0.5f;
+	const float HudY = Canvas->ClipY - HudHeight - 4.0f;
+	const auto DesignPoint = [HudX, HudY, Scale](float X, float Y)
 	{
-		const float SlotX = BarX + 18.0f + SlotIndex * 88.0f;
-		DrawRect(FLinearColor(0.015f, 0.012f, 0.012f, 0.98f), SlotX, BarY + 10.0f, 70.0f, 58.0f);
-		DrawRect(AbilityColors[SlotIndex], SlotX + 5.0f, BarY + 15.0f, 60.0f, 48.0f);
-		DrawCenteredText(AbilityNames[SlotIndex], FLinearColor::White, SlotX + 35.0f, BarY + 31.0f, GEngine->GetSmallFont(), 0.65f);
-		DrawCenteredText(AbilityKeys[SlotIndex], FLinearColor(0.92f, 0.74f, 0.42f), SlotX + 35.0f, BarY + 70.0f, GEngine->GetSmallFont(), 0.72f);
+		return FVector2D(HudX + X * Scale, HudY + Y * Scale);
+	};
+
+	// Live liquids and icons are authored in the frame's native 1744x362
+	// coordinate system. The single Scale value keeps every layer attached.
+	const FVector2D HealthCenter = DesignPoint(228.0f, 161.5f);
+	const FVector2D ResourceCenter = DesignPoint(1512.0f, 161.5f);
+
+	const FVector4 SlotBounds[] =
+	{
+		FVector4(417.0f, 123.0f, 161.0f, 153.0f),
+		FVector4(611.0f, 123.0f, 160.0f, 153.0f),
+		FVector4(802.0f, 123.0f, 156.0f, 153.0f),
+		FVector4(992.0f, 123.0f, 150.0f, 153.0f),
+		FVector4(1172.0f, 123.0f, 138.0f, 153.0f)
+	};
+	const FLinearColor SlotColors[] =
+	{
+		FLinearColor(0.92f, 0.26f, 0.015f),
+		FLinearColor(0.68f, 0.075f, 0.012f),
+		FLinearColor(0.10f, 0.32f, 0.75f),
+		FLinearColor(0.10f, 0.085f, 0.13f),
+		FLinearColor(0.42f, 0.025f, 0.018f)
+	};
+	if (ConnectedCombatHud)
+	{
+		DrawTexture(
+			ConnectedCombatHud,
+			HudX,
+			HudY,
+			HudWidth,
+			HudHeight,
+			0.0f,
+			0.0f,
+			1.0f,
+			1.0f,
+			FLinearColor::White,
+			BLEND_Translucent);
+	}
+
+	// The delivered aperture pixels are opaque black rather than transparent.
+	// Draw content afterward, strictly inside the measured openings, so the
+	// authored metalwork stays intact while live values remain visible.
+	DrawOrb(HealthCenter, 97.0f * Scale, Character->GetHealthComponent()->GetHealthNormalized(), FLinearColor(0.70f, 0.015f, 0.01f));
+	DrawOrb(ResourceCenter, 97.0f * Scale, Character->GetDodgeCooldownNormalized(), FLinearColor(0.025f, 0.24f, 0.78f));
+	for (int32 SlotIndex = 0; SlotIndex < UE_ARRAY_COUNT(SlotBounds); ++SlotIndex)
+	{
+		const FVector4& Slot = SlotBounds[SlotIndex];
+		const float Inset = 12.0f * Scale;
+		DrawRect(
+			SlotColors[SlotIndex],
+			HudX + Slot.X * Scale + Inset,
+			HudY + Slot.Y * Scale + Inset,
+			Slot.Z * Scale - Inset * 2.0f,
+			Slot.W * Scale - Inset * 2.0f);
+	}
+
+	const TCHAR* AbilityKeys[] = {TEXT("LMB"), TEXT("RMB"), TEXT("SHIFT"), TEXT("Q"), TEXT("3")};
+	for (int32 SlotIndex = 0; SlotIndex < UE_ARRAY_COUNT(SlotBounds); ++SlotIndex)
+	{
+		const FVector4& Slot = SlotBounds[SlotIndex];
+		DrawCenteredText(
+			AbilityKeys[SlotIndex],
+			FLinearColor(0.96f, 0.80f, 0.47f),
+			HudX + (Slot.X + Slot.Z * 0.5f) * Scale,
+			HudY + 279.0f * Scale,
+			GEngine->GetSmallFont(),
+			FMath::Clamp(Scale * 1.7f, 0.62f, 0.92f));
 	}
 
 	DrawCenteredText(
+		FString::Printf(TEXT("%.0f / %.0f"), Character->GetHealthComponent()->GetCurrentHealth(), Character->GetHealthComponent()->GetMaxHealth()),
+		FLinearColor::White,
+		HealthCenter.X,
+		HudY + 292.0f * Scale,
+		GEngine->GetSmallFont(),
+		FMath::Clamp(Scale * 1.55f, 0.62f, 0.86f));
+	DrawCenteredText(
 		FString::Printf(TEXT("GOLD  %d"), Character->GetGold()),
-		FLinearColor(1.0f, 0.66f, 0.16f), Canvas->ClipX * 0.5f, Canvas->ClipY - 14.0f, GEngine->GetSmallFont(), 0.78f);
+		FLinearColor(1.0f, 0.66f, 0.16f),
+		Canvas->ClipX * 0.5f,
+		HudY + 326.0f * Scale,
+		GEngine->GetSmallFont(),
+		FMath::Clamp(Scale * 1.55f, 0.62f, 0.86f));
 }
 
 void AEmberdeepHUD::DrawBar(

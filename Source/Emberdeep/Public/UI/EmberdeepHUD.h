@@ -36,4 +36,7 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UTexture2D> HudOrnaments;
+
+	UPROPERTY()
+	TObjectPtr<UTexture2D> ConnectedCombatHud;
 };
