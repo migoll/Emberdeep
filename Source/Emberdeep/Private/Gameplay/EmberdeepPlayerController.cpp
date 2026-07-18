@@ -1,6 +1,7 @@
 #include "Gameplay/EmberdeepPlayerController.h"
 
 #include "Emberdeep.h"
+#include "Kismet/KismetSystemLibrary.h"
 
 AEmberdeepPlayerController::AEmberdeepPlayerController()
 {
@@ -18,4 +19,15 @@ void AEmberdeepPlayerController::OnPossess(APawn* InPawn)
 		SetViewTarget(InPawn);
 		UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_CAMERA ViewTarget=%s"), *InPawn->GetName());
 	}
+}
+
+void AEmberdeepPlayerController::SetupInputComponent()
+{
+	Super::SetupInputComponent();
+	InputComponent->BindAction(TEXT("QuitGame"), IE_Pressed, this, &AEmberdeepPlayerController::QuitGame);
+}
+
+void AEmberdeepPlayerController::QuitGame()
+{
+	UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false);
 }

@@ -43,10 +43,10 @@ void AEmberdeepGameMode::SpawnBlockoutArena()
 
 	SpawnBlock(FVector(0.0f, 0.0f, -35.0f), FVector(12.0f, 9.0f, 0.6f), FloorColor);
 
-	SpawnBlock(FVector(0.0f, 890.0f, 155.0f), FVector(12.0f, 0.45f, 3.2f), WallColor);
-	SpawnBlock(FVector(0.0f, -890.0f, 155.0f), FVector(12.0f, 0.45f, 3.2f), WallColor);
-	SpawnBlock(FVector(1190.0f, 0.0f, 155.0f), FVector(0.45f, 8.5f, 3.2f), WallColor);
-	SpawnBlock(FVector(-1190.0f, 0.0f, 155.0f), FVector(0.45f, 8.5f, 3.2f), WallColor);
+	SpawnBlock(FVector(0.0f, 890.0f, 75.0f), FVector(12.0f, 0.45f, 1.6f), WallColor);
+	SpawnBlock(FVector(0.0f, -890.0f, 75.0f), FVector(12.0f, 0.45f, 1.6f), WallColor);
+	SpawnBlock(FVector(1190.0f, 0.0f, 75.0f), FVector(0.45f, 8.5f, 1.6f), WallColor);
+	SpawnBlock(FVector(-1190.0f, 0.0f, 75.0f), FVector(0.45f, 8.5f, 1.6f), WallColor);
 
 	for (const FVector PillarLocation : {
 		FVector(-650.0f, -470.0f, 120.0f), FVector(-650.0f, 470.0f, 120.0f),

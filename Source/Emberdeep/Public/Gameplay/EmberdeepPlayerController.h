@@ -14,4 +14,8 @@ public:
 
 protected:
 	virtual void OnPossess(APawn* InPawn) override;
+	virtual void SetupInputComponent() override;
+
+private:
+	void QuitGame();
 };

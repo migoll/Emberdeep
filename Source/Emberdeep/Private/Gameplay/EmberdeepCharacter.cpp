@@ -115,7 +115,9 @@ void AEmberdeepCharacter::MoveForward(float Value)
 {
 	if (!FMath::IsNearlyZero(Value))
 	{
-		AddMovementInput(FVector(1.0f, 1.0f, 0.0f).GetSafeNormal(), Value);
+		FVector ScreenUp = IsometricCamera->GetUpVector();
+		ScreenUp.Z = 0.0f;
+		AddMovementInput(ScreenUp.GetSafeNormal(), Value);
 	}
 }
 
@@ -123,7 +125,9 @@ void AEmberdeepCharacter::MoveRight(float Value)
 {
 	if (!FMath::IsNearlyZero(Value))
 	{
-		AddMovementInput(FVector(1.0f, -1.0f, 0.0f).GetSafeNormal(), Value);
+		FVector ScreenRight = IsometricCamera->GetRightVector();
+		ScreenRight.Z = 0.0f;
+		AddMovementInput(ScreenRight.GetSafeNormal(), Value);
 	}
 }
 
