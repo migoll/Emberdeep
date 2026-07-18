@@ -26,11 +26,13 @@ public:
 private:
 	void SpawnBlockoutArena();
 	void SpawnCombatEncounter();
+	void SpawnBoundary(const FVector& Location, const FVector& Extent);
 	void SpawnBlock(
 		const FVector& Location,
 		const FVector& Scale,
 		const FLinearColor& Color,
-		const FRotator& Rotation = FRotator::ZeroRotator);
+		const FRotator& Rotation = FRotator::ZeroRotator,
+		bool bEnableCollision = true);
 
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> CubeMesh;
