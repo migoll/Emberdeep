@@ -7,6 +7,7 @@
 #include "Emberdeep.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
 
 AEmberdeepCharacter::AEmberdeepCharacter()
@@ -34,7 +35,7 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 	IsometricCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("IsometricCamera"));
 	IsometricCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	IsometricCamera->ProjectionMode = ECameraProjectionMode::Orthographic;
-	IsometricCamera->OrthoWidth = 1750.0f;
+	IsometricCamera->OrthoWidth = 1350.0f;
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 
@@ -71,6 +72,19 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 void AEmberdeepCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	const auto SetBlockColor = [](UStaticMeshComponent* BlockMesh, const FLinearColor& Color)
+	{
+		if (UMaterialInstanceDynamic* Material = BlockMesh->CreateDynamicMaterialInstance(0))
+		{
+			Material->SetVectorParameterValue(TEXT("Color"), Color);
+		}
+	};
+
+	SetBlockColor(BodyBlock, FLinearColor(0.30f, 0.055f, 0.035f));
+	SetBlockColor(HeadBlock, FLinearColor(0.42f, 0.30f, 0.20f));
+	SetBlockColor(SwordBlock, FLinearColor(0.52f, 0.60f, 0.68f));
+	SetBlockColor(ShieldBlock, FLinearColor(0.42f, 0.07f, 0.035f));
 
 	if (HasAuthority() && GetActorLocation().Z < 50.0f)
 	{
@@ -125,4 +139,3 @@ void AEmberdeepCharacter::Dodge()
 	}
 	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_INPUT Dodge"));
 }
-

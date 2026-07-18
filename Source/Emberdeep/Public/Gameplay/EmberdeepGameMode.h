@@ -18,7 +18,11 @@ public:
 
 private:
 	void SpawnBlockoutArena();
-	void SpawnBlock(const FVector& Location, const FVector& Scale, const FRotator& Rotation = FRotator::ZeroRotator);
+	void SpawnBlock(
+		const FVector& Location,
+		const FVector& Scale,
+		const FLinearColor& Color,
+		const FRotator& Rotation = FRotator::ZeroRotator);
 
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> CubeMesh;
@@ -26,4 +30,3 @@ private:
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BlockMaterial;
 };
-

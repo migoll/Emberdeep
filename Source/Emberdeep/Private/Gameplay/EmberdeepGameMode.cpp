@@ -6,9 +6,11 @@
 #include "Emberdeep.h"
 #include "Engine/DirectionalLight.h"
 #include "Engine/PointLight.h"
+#include "Engine/PostProcessVolume.h"
 #include "Engine/StaticMeshActor.h"
 #include "Gameplay/EmberdeepCharacter.h"
 #include "Gameplay/EmberdeepPlayerController.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
 
 AEmberdeepGameMode::AEmberdeepGameMode()
@@ -35,18 +37,32 @@ void AEmberdeepGameMode::StartPlay()
 
 void AEmberdeepGameMode::SpawnBlockoutArena()
 {
-	SpawnBlock(FVector(0.0f, 0.0f, -35.0f), FVector(12.0f, 9.0f, 0.6f));
+	const FLinearColor FloorColor(0.13f, 0.105f, 0.085f);
+	const FLinearColor WallColor(0.16f, 0.175f, 0.19f);
+	const FLinearColor PillarColor(0.22f, 0.19f, 0.15f);
 
-	SpawnBlock(FVector(0.0f, 890.0f, 155.0f), FVector(12.0f, 0.45f, 3.2f));
-	SpawnBlock(FVector(0.0f, -890.0f, 155.0f), FVector(12.0f, 0.45f, 3.2f));
-	SpawnBlock(FVector(1190.0f, 0.0f, 155.0f), FVector(0.45f, 8.5f, 3.2f));
-	SpawnBlock(FVector(-1190.0f, 0.0f, 155.0f), FVector(0.45f, 8.5f, 3.2f));
+	SpawnBlock(FVector(0.0f, 0.0f, -35.0f), FVector(12.0f, 9.0f, 0.6f), FloorColor);
+
+	SpawnBlock(FVector(0.0f, 890.0f, 155.0f), FVector(12.0f, 0.45f, 3.2f), WallColor);
+	SpawnBlock(FVector(0.0f, -890.0f, 155.0f), FVector(12.0f, 0.45f, 3.2f), WallColor);
+	SpawnBlock(FVector(1190.0f, 0.0f, 155.0f), FVector(0.45f, 8.5f, 3.2f), WallColor);
+	SpawnBlock(FVector(-1190.0f, 0.0f, 155.0f), FVector(0.45f, 8.5f, 3.2f), WallColor);
 
 	for (const FVector PillarLocation : {
 		FVector(-650.0f, -470.0f, 120.0f), FVector(-650.0f, 470.0f, 120.0f),
 		FVector(650.0f, -470.0f, 120.0f), FVector(650.0f, 470.0f, 120.0f)})
 	{
-		SpawnBlock(PillarLocation, FVector(0.65f, 0.65f, 2.5f));
+		SpawnBlock(PillarLocation, FVector(0.65f, 0.65f, 2.5f), PillarColor);
+	}
+
+	APostProcessVolume* ExposureVolume = GetWorld()->SpawnActor<APostProcessVolume>();
+	if (ExposureVolume)
+	{
+		ExposureVolume->bUnbound = true;
+		ExposureVolume->Settings.bOverride_AutoExposureMethod = true;
+		ExposureVolume->Settings.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
+		ExposureVolume->Settings.bOverride_AutoExposureBias = true;
+		ExposureVolume->Settings.AutoExposureBias = 2.0f;
 	}
 
 	ADirectionalLight* MoonLight = GetWorld()->SpawnActor<ADirectionalLight>(
@@ -54,9 +70,22 @@ void AEmberdeepGameMode::SpawnBlockoutArena()
 		FRotator(-52.0f, -38.0f, 0.0f));
 	if (MoonLight)
 	{
-		MoonLight->GetLightComponent()->SetIntensity(2.2f);
-		MoonLight->GetLightComponent()->SetLightColor(FLinearColor(0.30f, 0.38f, 0.52f));
 		MoonLight->SetMobility(EComponentMobility::Movable);
+		MoonLight->GetLightComponent()->SetIntensity(8.0f);
+		MoonLight->GetLightComponent()->SetLightColor(FLinearColor(0.38f, 0.48f, 0.70f));
+	}
+
+	APointLight* AmbientFill = GetWorld()->SpawnActor<APointLight>(FVector(0.0f, 0.0f, 900.0f), FRotator::ZeroRotator);
+	if (AmbientFill)
+	{
+		AmbientFill->SetMobility(EComponentMobility::Movable);
+		AmbientFill->GetLightComponent()->SetIntensity(32000.0f);
+		AmbientFill->GetLightComponent()->SetLightColor(FLinearColor(0.30f, 0.40f, 0.58f));
+		if (UPointLightComponent* FillComponent = Cast<UPointLightComponent>(AmbientFill->GetLightComponent()))
+		{
+			FillComponent->SetAttenuationRadius(3200.0f);
+			FillComponent->SetCastShadows(false);
+		}
 	}
 
 	for (const FVector TorchLocation : {FVector(-760.0f, 0.0f, 180.0f), FVector(760.0f, 0.0f, 180.0f)})
@@ -64,11 +93,12 @@ void AEmberdeepGameMode::SpawnBlockoutArena()
 		APointLight* Torch = GetWorld()->SpawnActor<APointLight>(TorchLocation, FRotator::ZeroRotator);
 		if (Torch)
 		{
-			Torch->GetLightComponent()->SetIntensity(4200.0f);
-			Torch->GetLightComponent()->SetLightColor(FLinearColor(1.0f, 0.28f, 0.045f));
+			Torch->SetMobility(EComponentMobility::Movable);
+			Torch->GetLightComponent()->SetIntensity(18000.0f);
+			Torch->GetLightComponent()->SetLightColor(FLinearColor(1.0f, 0.22f, 0.035f));
 			if (UPointLightComponent* PointLightComponent = Cast<UPointLightComponent>(Torch->GetLightComponent()))
 			{
-				PointLightComponent->SetAttenuationRadius(620.0f);
+				PointLightComponent->SetAttenuationRadius(950.0f);
 			}
 		}
 	}
@@ -76,7 +106,11 @@ void AEmberdeepGameMode::SpawnBlockoutArena()
 	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_FOUNDATION ArenaGenerated"));
 }
 
-void AEmberdeepGameMode::SpawnBlock(const FVector& Location, const FVector& Scale, const FRotator& Rotation)
+void AEmberdeepGameMode::SpawnBlock(
+	const FVector& Location,
+	const FVector& Scale,
+	const FLinearColor& Color,
+	const FRotator& Rotation)
 {
 	if (!CubeMesh)
 	{
@@ -96,6 +130,8 @@ void AEmberdeepGameMode::SpawnBlock(const FVector& Location, const FVector& Scal
 	MeshComponent->SetCollisionProfileName(TEXT("BlockAll"));
 	if (BlockMaterial)
 	{
-		MeshComponent->SetMaterial(0, BlockMaterial);
+		UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(BlockMaterial, Block);
+		Material->SetVectorParameterValue(TEXT("Color"), Color);
+		MeshComponent->SetMaterial(0, Material);
 	}
 }
