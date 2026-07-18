@@ -15,7 +15,10 @@
       "Name": "ModelingToolsEditorMode",
       "Enabled": true,
       "TargetAllowList": ["Editor"]
+    },
+    {
+      "Name": "AndroidFileServer",
+      "Enabled": false
     }
   ]
 }
-

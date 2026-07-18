@@ -9,14 +9,17 @@
 #include "Engine/PostProcessVolume.h"
 #include "Engine/StaticMeshActor.h"
 #include "Gameplay/EmberdeepCharacter.h"
+#include "Gameplay/EmberdeepEnemy.h"
 #include "Gameplay/EmberdeepPlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "UI/EmberdeepHUD.h"
 #include "UObject/ConstructorHelpers.h"
 
 AEmberdeepGameMode::AEmberdeepGameMode()
 {
 	DefaultPawnClass = AEmberdeepCharacter::StaticClass();
 	PlayerControllerClass = AEmberdeepPlayerController::StaticClass();
+	HUDClass = AEmberdeepHUD::StaticClass();
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeAsset(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	CubeMesh = CubeAsset.Object;
@@ -32,7 +35,40 @@ void AEmberdeepGameMode::StartPlay()
 	if (HasAuthority())
 	{
 		SpawnBlockoutArena();
+		SpawnCombatEncounter();
 	}
+}
+
+void AEmberdeepGameMode::SpawnCombatEncounter()
+{
+	RemainingEnemies = 0;
+	const TArray<FVector> EnemyLocations = {
+		FVector(-620.0f, -360.0f, 110.0f),
+		FVector(640.0f, 330.0f, 110.0f),
+		FVector(0.0f, 690.0f, 110.0f)};
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	for (const FVector& EnemyLocation : EnemyLocations)
+	{
+		if (GetWorld()->SpawnActor<AEmberdeepEnemy>(
+			AEmberdeepEnemy::StaticClass(),
+			EnemyLocation,
+			FRotator::ZeroRotator,
+			SpawnParameters))
+		{
+			++RemainingEnemies;
+		}
+	}
+
+	bEncounterStarted = RemainingEnemies > 0;
+	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_ENCOUNTER Started Enemies=%d"), RemainingEnemies);
+}
+
+void AEmberdeepGameMode::NotifyEnemyDefeated()
+{
+	RemainingEnemies = FMath::Max(0, RemainingEnemies - 1);
+	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_ENCOUNTER EnemyDefeated Remaining=%d"), RemainingEnemies);
 }
 
 void AEmberdeepGameMode::SpawnBlockoutArena()

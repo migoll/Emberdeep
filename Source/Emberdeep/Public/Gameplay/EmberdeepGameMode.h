@@ -15,9 +15,17 @@ class EMBERDEEP_API AEmberdeepGameMode : public AGameModeBase
 public:
 	AEmberdeepGameMode();
 	virtual void StartPlay() override;
+	void NotifyEnemyDefeated();
+
+	UFUNCTION(BlueprintPure, Category = "Encounter")
+	int32 GetRemainingEnemies() const { return RemainingEnemies; }
+
+	UFUNCTION(BlueprintPure, Category = "Encounter")
+	bool IsEncounterComplete() const { return bEncounterStarted && RemainingEnemies <= 0; }
 
 private:
 	void SpawnBlockoutArena();
+	void SpawnCombatEncounter();
 	void SpawnBlock(
 		const FVector& Location,
 		const FVector& Scale,
@@ -29,4 +37,7 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BlockMaterial;
+
+	int32 RemainingEnemies = 0;
+	bool bEncounterStarted = false;
 };

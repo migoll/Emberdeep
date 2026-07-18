@@ -10,14 +10,18 @@ The core loop is:
 
 Phase 0A proves one Fighter, one small dungeon arena, responsive combat, one skeleton foundation, and the intended visual treatment. Multiplayer begins only in Phase 0B, immediately after the combat proof succeeds.
 
-The first foundation build contains:
+The current Phase 0A slice contains:
 
 - a generated blockout dungeon arena;
 - fixed orthographic near-isometric camera;
 - visible chunky placeholder Fighter;
-- WASD movement;
-- basic, heavy, and dodge input hooks;
-- C++ gameplay foundations suitable for later server authority.
+- screen-relative WASD movement and invulnerable dodge;
+- basic and heavy melee attacks with cooldowns and knockback;
+- three server-owned skeleton enemies with proximity aggro;
+- health, death, automatic encounter restart, enemy hit flashes, and defeat feedback;
+- dropped gold pickups and victory tracking;
+- a placeholder combat HUD for health, dodge recovery, gold, and enemy count;
+- replicated-ready C++ health and gameplay foundations.
 
 ## Controls
 
@@ -26,6 +30,10 @@ The first foundation build contains:
 - Right mouse or `E`: heavy attack hook
 - Left Shift: dodge hook
 - `Escape`: quit standalone test
+
+Designer handoff templates live in `SourceAssets/Characters/Fighter` and
+`SourceAssets/Environment/Campground`. Runtime imports belong under the matching
+`Content/Emberdeep` folders.
 
 ## Setup
 
@@ -36,4 +44,3 @@ The first foundation build contains:
 Generated folders such as `Binaries`, `Intermediate`, `Saved`, and `DerivedDataCache` are intentionally ignored.
 
 See `ROADMAP.md`, `BACKLOG.md`, `docs/ART_DIRECTION.md`, and `docs/ASSET_PIPELINE.md` before adding systems or content.
-
