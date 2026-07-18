@@ -3,6 +3,7 @@
 #include "AIController.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/DamageEvents.h"
 #include "EngineUtils.h"
@@ -14,6 +15,7 @@
 #include "Gameplay/EmberdeepHealthComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
@@ -35,16 +37,28 @@ AEmberdeepEnemy::AEmberdeepEnemy()
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 720.0f, 0.0f);
 	bUseControllerRotationYaw = false;
 
+	EnemyVisualRoot = CreateDefaultSubobject<USceneComponent>(TEXT("EnemyVisualRoot"));
+	EnemyVisualRoot->SetupAttachment(RootComponent);
+	EnemyVisualRoot->SetUsingAbsoluteRotation(true);
+
 	HealthComponent = CreateDefaultSubobject<UEmberdeepHealthComponent>(TEXT("HealthComponent"));
 	HealthComponent->SetMaxHealth(92.0f);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> ProjectVoxelMaterial(
+		TEXT("/Game/Emberdeep/Materials/M_VoxelSurface.M_VoxelSurface"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> FallbackVoxelMaterial(
+		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	UMaterialInterface* VoxelMaterial = ProjectVoxelMaterial.Succeeded()
+		? ProjectVoxelMaterial.Object
+		: FallbackVoxelMaterial.Object;
 	for (int32 ShadeIndex = 0; ShadeIndex < EmberdeepVoxelStyle::ShadeCount; ++ShadeIndex)
 	{
 		const FName MeshName(*FString::Printf(TEXT("BoneVoxels_Shade%d"), ShadeIndex));
 		UInstancedStaticMeshComponent* BoneMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(MeshName);
-		BoneMesh->SetupAttachment(RootComponent);
+		BoneMesh->SetupAttachment(EnemyVisualRoot);
 		BoneMesh->SetStaticMesh(CubeMesh.Object);
+		BoneMesh->SetMaterial(0, VoxelMaterial);
 		BoneMesh->SetMobility(EComponentMobility::Movable);
 		BoneMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		BoneMesh->SetGenerateOverlapEvents(false);
@@ -110,6 +124,66 @@ AEmberdeepEnemy::AEmberdeepEnemy()
 		BoneVoxelMeshes[ShadeIndex]->AddInstances(ShadeTransforms[ShadeIndex], false, false, true);
 	}
 
+	// A readable weapon is more important than anatomical micro-detail at the
+	// gameplay camera. The sword is built from the same 4 cm cells and moves as a
+	// rigid cluster, giving every skeleton a clear attack side and silhouette.
+	WeaponRoot = CreateDefaultSubobject<USceneComponent>(TEXT("WeaponRoot"));
+	WeaponRoot->SetupAttachment(EnemyVisualRoot);
+	WeaponRoot->SetRelativeLocation(FVector(8.0f, 42.0f, -4.0f));
+	WeaponRoot->SetRelativeRotation(FRotator(0.0f, 0.0f, 150.0f));
+
+	WeaponSteelVoxels = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("WeaponSteelVoxels"));
+	WeaponSteelVoxels->SetupAttachment(WeaponRoot);
+	WeaponSteelVoxels->SetStaticMesh(CubeMesh.Object);
+	WeaponSteelVoxels->SetMaterial(0, VoxelMaterial);
+	WeaponSteelVoxels->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WeaponSteelVoxels->SetGenerateOverlapEvents(false);
+	WeaponSteelVoxels->SetCanEverAffectNavigation(false);
+
+	WeaponGripVoxels = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("WeaponGripVoxels"));
+	WeaponGripVoxels->SetupAttachment(WeaponRoot);
+	WeaponGripVoxels->SetStaticMesh(CubeMesh.Object);
+	WeaponGripVoxels->SetMaterial(0, VoxelMaterial);
+	WeaponGripVoxels->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WeaponGripVoxels->SetGenerateOverlapEvents(false);
+	WeaponGripVoxels->SetCanEverAffectNavigation(false);
+
+	const auto AddWeaponCell = [](UInstancedStaticMeshComponent* TargetMesh, int32 X, int32 Y, int32 Z)
+	{
+		TargetMesh->AddInstance(FTransform(
+			FQuat::Identity,
+			EmberdeepVoxelStyle::CellCenter(X, Y, Z),
+			EmberdeepVoxelStyle::InstanceScale()));
+	};
+	for (int32 Z = -3; Z <= 3; ++Z)
+	{
+		AddWeaponCell(WeaponGripVoxels, 0, 0, Z);
+	}
+	for (int32 Y = -3; Y <= 3; ++Y)
+	{
+		AddWeaponCell(WeaponSteelVoxels, 0, Y, 4);
+	}
+	for (int32 Z = 5; Z <= 19; ++Z)
+	{
+		AddWeaponCell(WeaponSteelVoxels, 0, 0, Z);
+		if (Z <= 16)
+		{
+			AddWeaponCell(WeaponSteelVoxels, 1, 0, Z);
+		}
+	}
+	AddWeaponCell(WeaponSteelVoxels, 0, 0, 20);
+
+	AccentVoxels = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("EnemyAccentVoxels"));
+	AccentVoxels->SetupAttachment(EnemyVisualRoot);
+	AccentVoxels->SetStaticMesh(CubeMesh.Object);
+	AccentVoxels->SetMaterial(0, VoxelMaterial);
+	AccentVoxels->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	AccentVoxels->SetGenerateOverlapEvents(false);
+	AccentVoxels->SetCanEverAffectNavigation(false);
+	// Recessed dark eye sockets stop the pale skull from becoming a featureless box.
+	AddWeaponCell(AccentVoxels, 4, -2, 17);
+	AddWeaponCell(AccentVoxels, 4, 2, 17);
+
 	AttackTelegraph = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("AttackTelegraph"));
 	AttackTelegraph->SetupAttachment(RootComponent);
 	AttackTelegraph->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -127,19 +201,48 @@ void AEmberdeepEnemy::BeginPlay()
 	Super::BeginPlay();
 	HealthComponent->OnDeath.AddUObject(this, &AEmberdeepEnemy::HandleDeath);
 
-	const FLinearColor BoneColor(0.48f, 0.42f, 0.31f);
+	VisualRestingLocation = EnemyVisualRoot->GetRelativeLocation();
+	VisualRestingRotation = EnemyVisualRoot->GetRelativeRotation();
+	VisualFacingYaw = GetActorRotation().Yaw;
+	WeaponRestingLocation = WeaponRoot->GetRelativeLocation();
+	WeaponRestingRotation = WeaponRoot->GetRelativeRotation();
+
+	const FLinearColor BoneColor = FLinearColor::FromSRGBColor(FColor(144, 126, 92));
 	for (int32 ShadeIndex = 0; ShadeIndex < BoneVoxelMeshes.Num(); ++ShadeIndex)
 	{
 		if (UMaterialInstanceDynamic* Material = BoneVoxelMeshes[ShadeIndex]->CreateDynamicMaterialInstance(0))
 		{
 			Material->SetVectorParameterValue(TEXT("Color"), EmberdeepVoxelStyle::ShadeColor(BoneColor, ShadeIndex));
+			Material->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.14f);
 			BoneMaterials.Add(Material);
 		}
+	}
+	WeaponSteelMaterial = WeaponSteelVoxels->CreateDynamicMaterialInstance(0);
+	if (WeaponSteelMaterial)
+	{
+		WeaponSteelMaterial->SetVectorParameterValue(
+			TEXT("Color"), FLinearColor::FromSRGBColor(FColor(93, 102, 111)));
+		WeaponSteelMaterial->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.12f);
+	}
+	WeaponGripMaterial = WeaponGripVoxels->CreateDynamicMaterialInstance(0);
+	if (WeaponGripMaterial)
+	{
+		WeaponGripMaterial->SetVectorParameterValue(
+			TEXT("Color"), FLinearColor::FromSRGBColor(FColor(78, 47, 28)));
+		WeaponGripMaterial->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.10f);
+	}
+	AccentMaterial = AccentVoxels->CreateDynamicMaterialInstance(0);
+	if (AccentMaterial)
+	{
+		AccentMaterial->SetVectorParameterValue(
+			TEXT("Color"), FLinearColor::FromSRGBColor(FColor(13, 10, 9)));
+		AccentMaterial->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.05f);
 	}
 
 	if (UMaterialInstanceDynamic* TelegraphMaterial = AttackTelegraph->CreateDynamicMaterialInstance(0))
 	{
 		TelegraphMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.9f, 0.015f, 0.005f));
+		TelegraphMaterial->SetScalarParameterValue(TEXT("EmissiveStrength"), 3.0f);
 	}
 	ApplyEnemyStyle();
 }
@@ -167,10 +270,113 @@ void AEmberdeepEnemy::ConfigureForRun(int32 Tier, bool bElite)
 void AEmberdeepEnemy::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdateVisualPresentation(DeltaSeconds);
 	if (HasAuthority() && !HealthComponent->IsDead())
 	{
 		UpdateServerAI();
 	}
+}
+
+void AEmberdeepEnemy::UpdateVisualPresentation(float DeltaSeconds)
+{
+	(void)DeltaSeconds;
+	ApplySteppedVisualPose(false);
+}
+
+void AEmberdeepEnemy::ApplySteppedVisualPose(bool bForce)
+{
+	if (!EnemyVisualRoot || !WeaponRoot || !GetWorld())
+	{
+		return;
+	}
+
+	constexpr float VisualPoseRate = 12.0f;
+	const float Now = GetWorld()->GetTimeSeconds();
+	const int32 PoseStep = FMath::FloorToInt(Now * VisualPoseRate);
+	if (!bForce && LastVisualPoseStep == PoseStep)
+	{
+		return;
+	}
+	LastVisualPoseStep = PoseStep;
+	const float PoseTime = static_cast<float>(PoseStep) / VisualPoseRate;
+	VisualFacingYaw = bForce
+		? GetActorRotation().Yaw
+		: FMath::FixedTurn(VisualFacingYaw, GetActorRotation().Yaw, 60.0f);
+
+	const FVector PlanarVelocity(GetVelocity().X, GetVelocity().Y, 0.0f);
+	const float MoveAlpha = FMath::Clamp(
+		PlanarVelocity.Size() / FMath::Max(GetCharacterMovement()->MaxWalkSpeed, 1.0f),
+		0.0f,
+		1.0f);
+	const FVector LocalVelocity = GetActorTransform().InverseTransformVectorNoScale(
+		PlanarVelocity.GetSafeNormal());
+	const float Gait = FMath::Sin(PoseTime * UE_PI * 5.2f);
+	const float IdleRattle = FMath::Sin(PoseTime * UE_PI * 1.9f);
+
+	FVector VisualOffset(0.0f, 0.0f, FMath::Lerp(IdleRattle * 0.7f, FMath::Abs(Gait) * 3.6f, MoveAlpha));
+	FRotator VisualRotation(
+		-LocalVelocity.X * 4.5f * MoveAlpha,
+		IdleRattle * 1.2f * (1.0f - MoveAlpha),
+		LocalVelocity.Y * 4.8f * MoveAlpha + Gait * 2.1f * MoveAlpha);
+	FVector WeaponOffset = WeaponRestingLocation + FVector(0.0f, 0.0f, -Gait * 1.8f * MoveAlpha);
+	FRotator WeaponRotation = WeaponRestingRotation + FRotator(0.0f, Gait * 2.0f * MoveAlpha, Gait * 5.0f * MoveAlpha);
+
+	if (bAttackWindingUp)
+	{
+		const float WindupDuration = bIsElite ? 0.72f : 0.30f;
+		const float WindupAlpha = FMath::Clamp((Now - VisualWindupStartTime) / WindupDuration, 0.0f, 1.0f);
+		const float WindupEase = FMath::InterpEaseIn(0.0f, 1.0f, WindupAlpha, 2.0f);
+		VisualOffset.Z -= 3.5f * WindupEase;
+		VisualRotation.Pitch += 7.0f * WindupEase;
+		VisualRotation.Yaw -= 8.0f * WindupEase;
+		WeaponRotation = WeaponRestingRotation + FRotator(-10.0f * WindupEase, -8.0f * WindupEase, 76.0f * WindupEase);
+		WeaponOffset = WeaponRestingLocation + FVector(-4.0f, 0.0f, 8.0f) * WindupEase;
+
+		const float Pulse = 1.0f + 0.09f * (0.5f + 0.5f * FMath::Sin(PoseTime * UE_PI * 9.0f));
+		const FVector TelegraphBase = bIsElite
+			? FVector(3.2f, 3.2f, 0.025f)
+			: FVector(2.05f, 2.05f, 0.020f);
+		AttackTelegraph->SetRelativeScale3D(FVector(TelegraphBase.X * Pulse, TelegraphBase.Y * Pulse, TelegraphBase.Z));
+	}
+	else
+	{
+		const float RecoveryElapsed = Now - VisualAttackRecoveryStartTime;
+		if (RecoveryElapsed >= 0.0f && RecoveryElapsed < 0.24f)
+		{
+			const float RecoveryEnvelope = 1.0f - RecoveryElapsed / 0.24f;
+			VisualRotation.Pitch -= 10.0f * RecoveryEnvelope;
+			VisualRotation.Yaw += 6.0f * RecoveryEnvelope;
+			WeaponRotation = WeaponRestingRotation + FRotator(8.0f, 5.0f, -118.0f * RecoveryEnvelope);
+			WeaponOffset = WeaponRestingLocation + FVector(8.0f, 0.0f, -4.0f) * RecoveryEnvelope;
+		}
+	}
+
+	const float HitElapsed = Now - VisualHitStartTime;
+	if (HitElapsed >= 0.0f && HitElapsed < 0.16f)
+	{
+		const float HitEnvelope = 1.0f - HitElapsed / 0.16f;
+		VisualRotation.Pitch += 11.0f * HitEnvelope;
+		VisualRotation.Roll -= 5.0f * HitEnvelope;
+		VisualOffset.X -= 4.0f * HitEnvelope;
+	}
+
+	if (bVisualDead)
+	{
+		const float DeathAlpha = FMath::Clamp((Now - VisualDeathStartTime) / 0.62f, 0.0f, 1.0f);
+		const float DeathEase = FMath::InterpEaseOut(0.0f, 1.0f, DeathAlpha, 2.0f);
+		VisualOffset = FVector(0.0f, 0.0f, -38.0f * DeathEase);
+		VisualRotation = FRotator(6.0f * DeathEase, 8.0f * DeathEase, -82.0f * DeathEase);
+		WeaponRotation = WeaponRestingRotation + FRotator(0.0f, 12.0f * DeathEase, 105.0f * DeathEase);
+		WeaponOffset = WeaponRestingLocation + FVector(0.0f, 8.0f, -28.0f) * DeathEase;
+	}
+
+	EnemyVisualRoot->SetRelativeLocation(VisualRestingLocation + VisualOffset);
+	EnemyVisualRoot->SetWorldRotation(FRotator(
+		VisualRestingRotation.Pitch + VisualRotation.Pitch,
+		VisualFacingYaw + VisualRestingRotation.Yaw + VisualRotation.Yaw,
+		VisualRestingRotation.Roll + VisualRotation.Roll));
+	WeaponRoot->SetRelativeLocation(WeaponOffset);
+	WeaponRoot->SetRelativeRotation(WeaponRotation);
 }
 
 void AEmberdeepEnemy::UpdateServerAI()
@@ -309,10 +515,14 @@ void AEmberdeepEnemy::MulticastPlayHitFeedback_Implementation(
 	FVector_NetQuantizeNormal HitDirection,
 	bool bFatal)
 {
-	ApplyBoneColor(bFatal ? FLinearColor(1.0f, 0.20f, 0.015f) : FLinearColor(0.95f, 0.055f, 0.02f));
+	ApplyBoneColor(bFatal
+		? FLinearColor::FromSRGBColor(FColor(255, 82, 10))
+		: FLinearColor::FromSRGBColor(FColor(255, 48, 12)));
+	VisualHitStartTime = GetWorld()->GetTimeSeconds();
+	ApplySteppedVisualPose(true);
 	AEmberdeepCombatFeedback::SpawnHit(
 		GetWorld(),
-		GetActorLocation() + FVector(0.0f, 0.0f, 35.0f),
+		GetActorLocation(),
 		FVector(HitDirection),
 		Damage,
 		bFatal);
@@ -326,17 +536,26 @@ void AEmberdeepEnemy::MulticastPlayHitFeedback_Implementation(
 void AEmberdeepEnemy::MulticastSetAttackTelegraph_Implementation(bool bVisible, bool bEliteAttack)
 {
 	bAttackWindingUp = bVisible;
+	if (bVisible)
+	{
+		VisualWindupStartTime = GetWorld()->GetTimeSeconds();
+	}
+	else
+	{
+		VisualAttackRecoveryStartTime = GetWorld()->GetTimeSeconds();
+	}
 	AttackTelegraph->SetRelativeScale3D(bEliteAttack
 		? FVector(3.2f, 3.2f, 0.025f)
 		: FVector(2.05f, 2.05f, 0.020f));
 	AttackTelegraph->SetHiddenInGame(!bVisible);
+	ApplySteppedVisualPose(true);
 }
 
 void AEmberdeepEnemy::ResetHitFlash()
 {
 	ApplyBoneColor(bIsElite
-		? FLinearColor(0.34f, 0.10f, 0.055f)
-		: FLinearColor(0.48f, 0.42f, 0.31f));
+		? FLinearColor::FromSRGBColor(FColor(118, 55, 35))
+		: FLinearColor::FromSRGBColor(FColor(144, 126, 92)));
 }
 
 void AEmberdeepEnemy::ApplyBoneColor(const FLinearColor& Color)
@@ -351,10 +570,20 @@ void AEmberdeepEnemy::ApplyBoneColor(const FLinearColor& Color)
 
 void AEmberdeepEnemy::ApplyEnemyStyle()
 {
-	SetActorScale3D(bIsElite ? FVector(1.25f) : FVector::OneVector);
+	// Never resize the actor to make an elite: that would also resize every 4 cm
+	// cell and break the common world lattice. Palette and weapon contrast carry it.
+	SetActorScale3D(FVector::OneVector);
 	ApplyBoneColor(bIsElite
-		? FLinearColor(0.34f, 0.10f, 0.055f)
-		: FLinearColor(0.48f, 0.42f, 0.31f));
+		? FLinearColor::FromSRGBColor(FColor(118, 55, 35))
+		: FLinearColor::FromSRGBColor(FColor(144, 126, 92)));
+	if (WeaponSteelMaterial)
+	{
+		WeaponSteelMaterial->SetVectorParameterValue(
+			TEXT("Color"),
+			bIsElite
+				? FLinearColor::FromSRGBColor(FColor(174, 72, 34))
+				: FLinearColor::FromSRGBColor(FColor(93, 102, 111)));
+	}
 }
 
 void AEmberdeepEnemy::OnRep_EnemyStyle()
@@ -370,10 +599,12 @@ void AEmberdeepEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 
 void AEmberdeepEnemy::HandleDeath()
 {
+	bVisualDead = true;
+	VisualDeathStartTime = GetWorld()->GetTimeSeconds();
+	ApplySteppedVisualPose(true);
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	MulticastSetAttackTelegraph(false, bIsElite);
-	SetActorScale3D(FVector(1.15f, 1.15f, 0.20f));
 
 	if (HasAuthority())
 	{
@@ -390,5 +621,5 @@ void AEmberdeepEnemy::HandleDeath()
 		}
 	}
 
-	SetLifeSpan(0.35f);
+	SetLifeSpan(0.78f);
 }

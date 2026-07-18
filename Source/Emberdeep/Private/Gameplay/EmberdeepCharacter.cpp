@@ -223,18 +223,33 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 	IsometricCamera->PostProcessSettings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
 	IsometricCamera->PostProcessSettings.AutoExposureApplyPhysicalCameraExposure = 0;
 	IsometricCamera->PostProcessSettings.bOverride_AutoExposureBias = true;
-	IsometricCamera->PostProcessSettings.AutoExposureBias = 0.15f;
+	IsometricCamera->PostProcessSettings.AutoExposureBias = 2.0f;
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> VoxelMaterial(
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> ProjectVoxelMaterial(
+		TEXT("/Game/Emberdeep/Materials/M_VoxelSurface.M_VoxelSurface"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> FallbackVoxelMaterial(
 		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	UMaterialInterface* VoxelMaterial = ProjectVoxelMaterial.Succeeded()
+		? ProjectVoxelMaterial.Object
+		: FallbackVoxelMaterial.Object;
+
+	// Gameplay rotation and collision remain on the replicated Character root. All
+	// authored geometry lives below a cosmetic root so every peer can derive the
+	// same deliberately stepped miniature animation from replicated movement.
+	ThorgrimVisualRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ThorgrimVisualRoot"));
+	ThorgrimVisualRoot->SetupAttachment(RootComponent);
+	ThorgrimVisualRoot->SetUsingAbsoluteRotation(true);
+
+	ThorgrimBodyRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ThorgrimBodyRoot"));
+	ThorgrimBodyRoot->SetupAttachment(ThorgrimVisualRoot);
 
 	ThorgrimAxeRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ThorgrimAxeRoot"));
-	ThorgrimAxeRoot->SetupAttachment(RootComponent);
+	ThorgrimAxeRoot->SetupAttachment(ThorgrimVisualRoot);
 	ThorgrimAxeRoot->SetRelativeLocation(GThorgrimAxePivot);
 
 	ThorgrimShieldRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ThorgrimShieldRoot"));
-	ThorgrimShieldRoot->SetupAttachment(RootComponent);
+	ThorgrimShieldRoot->SetupAttachment(ThorgrimVisualRoot);
 	ThorgrimShieldRoot->SetRelativeLocation(GThorgrimShieldPivot);
 
 	TMap<int32, UInstancedStaticMeshComponent*> PaletteMeshes;
@@ -245,7 +260,7 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 		* EmberdeepVoxelStyle::ShadeCount);
 	for (const FThorgrimPartDefinition& PartDefinition : GThorgrimPartDefinitions)
 	{
-		USceneComponent* PartRoot = RootComponent;
+		USceneComponent* PartRoot = ThorgrimBodyRoot;
 		if (PartDefinition.Part == EThorgrimPart::Axe)
 		{
 			PartRoot = ThorgrimAxeRoot;
@@ -271,8 +286,9 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 				PaletteMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				PaletteMesh->SetGenerateOverlapEvents(false);
 				PaletteMesh->SetCanEverAffectNavigation(false);
+				PaletteMesh->SetCastShadow(true);
 				PaletteMesh->SetStaticMesh(CubeMesh.Object);
-				PaletteMesh->SetMaterial(0, VoxelMaterial.Object);
+				PaletteMesh->SetMaterial(0, VoxelMaterial);
 				ThorgrimPaletteMeshes.Add(PaletteMesh);
 				PaletteMeshes.Add(
 					GetThorgrimMeshKey(PartDefinition.Part, PaletteDefinition.Palette, ShadeIndex),
@@ -303,6 +319,7 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 void AEmberdeepCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdateVisualPresentation(DeltaSeconds);
 
 	if (IsLocallyControlled())
 	{
@@ -352,6 +369,7 @@ void AEmberdeepCharacter::BeginPlay()
 				Material->SetVectorParameterValue(
 					TEXT("Color"),
 					BaseColor);
+				Material->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.12f);
 				++ThorgrimMaterialCount;
 				ThorgrimMaterials.Add(Material);
 				ThorgrimMaterialBaseColors.Add(BaseColor);
@@ -365,7 +383,14 @@ void AEmberdeepCharacter::BeginPlay()
 		ThorgrimInstanceCount,
 		ThorgrimMaterialCount);
 
+	ThorgrimVisualRestingLocation = ThorgrimVisualRoot->GetRelativeLocation();
+	ThorgrimVisualRestingRotation = ThorgrimVisualRoot->GetRelativeRotation();
+	VisualFacingYaw = GetActorRotation().Yaw;
+	ThorgrimBodyRestingLocation = ThorgrimBodyRoot->GetRelativeLocation();
 	ThorgrimAxeRestingRotation = ThorgrimAxeRoot->GetRelativeRotation();
+	ThorgrimAxeRestingLocation = ThorgrimAxeRoot->GetRelativeLocation();
+	ThorgrimShieldRestingRotation = ThorgrimShieldRoot->GetRelativeRotation();
+	ThorgrimShieldRestingLocation = ThorgrimShieldRoot->GetRelativeLocation();
 	HealthComponent->OnDeath.AddUObject(this, &AEmberdeepCharacter::HandleDeath);
 
 	if (HasAuthority() && GetActorLocation().Z < 50.0f)
@@ -418,6 +443,119 @@ void AEmberdeepCharacter::ZoomCamera(float Value)
 			MinimumOrthoWidth,
 			MaximumOrthoWidth);
 	}
+}
+
+void AEmberdeepCharacter::UpdateVisualPresentation(float DeltaSeconds)
+{
+	(void)DeltaSeconds;
+	ApplySteppedVisualPose(false);
+}
+
+void AEmberdeepCharacter::ApplySteppedVisualPose(bool bForce)
+{
+	if (!ThorgrimVisualRoot || !ThorgrimBodyRoot || !ThorgrimAxeRoot || !ThorgrimShieldRoot || !GetWorld())
+	{
+		return;
+	}
+
+	// The simulation stays full-rate. Only the rigid visual clusters hold poses at
+	// 12 fps, matching the low-resolution miniature presentation in the target.
+	constexpr float VisualPoseRate = 12.0f;
+	const float Now = GetWorld()->GetTimeSeconds();
+	const int32 PoseStep = FMath::FloorToInt(Now * VisualPoseRate);
+	if (!bForce && PoseStep == LastVisualPoseStep)
+	{
+		return;
+	}
+	LastVisualPoseStep = PoseStep;
+	const float PoseTime = static_cast<float>(PoseStep) / VisualPoseRate;
+	VisualFacingYaw = bForce
+		? GetActorRotation().Yaw
+		: FMath::FixedTurn(VisualFacingYaw, GetActorRotation().Yaw, 60.0f);
+
+	const FVector PlanarVelocity(GetVelocity().X, GetVelocity().Y, 0.0f);
+	const float MoveAlpha = FMath::Clamp(
+		PlanarVelocity.Size() / FMath::Max(GetCharacterMovement()->MaxWalkSpeed, 1.0f),
+		0.0f,
+		1.0f);
+	const FVector LocalVelocity = GetActorTransform().InverseTransformVectorNoScale(
+		PlanarVelocity.GetSafeNormal());
+	const float Gait = FMath::Sin(PoseTime * UE_PI * 6.0f);
+	const float GaitLift = FMath::Abs(Gait);
+	const float IdleBreath = FMath::Sin(PoseTime * UE_PI * 1.55f);
+
+	FVector VisualOffset(0.0f, 0.0f, FMath::Lerp(IdleBreath * 1.25f, GaitLift * 3.25f, MoveAlpha));
+	FRotator VisualRotation(
+		-LocalVelocity.X * 3.8f * MoveAlpha,
+		0.0f,
+		LocalVelocity.Y * 4.2f * MoveAlpha + Gait * 1.2f * MoveAlpha);
+	FVector BodyOffset(0.0f, 0.0f, IdleBreath * (1.0f - MoveAlpha) * 0.65f);
+	FRotator AxeRotation = ThorgrimAxeRestingRotation
+		+ FRotator(Gait * 1.5f * MoveAlpha, 0.0f, -Gait * 4.5f * MoveAlpha);
+	FVector AxeOffset = ThorgrimAxeRestingLocation + FVector(0.0f, 0.0f, -Gait * 1.4f * MoveAlpha);
+	FRotator ShieldRotation = ThorgrimShieldRestingRotation
+		+ FRotator(-Gait * 1.0f * MoveAlpha, 0.0f, Gait * 3.0f * MoveAlpha);
+	FVector ShieldOffset = ThorgrimShieldRestingLocation + FVector(0.0f, 0.0f, Gait * 1.0f * MoveAlpha);
+
+	const float AttackElapsed = Now - VisualAttackStartTime;
+	if (AttackElapsed >= 0.0f && AttackElapsed < VisualAttackDuration)
+	{
+		const float AttackAlpha = FMath::Clamp(AttackElapsed / FMath::Max(VisualAttackDuration, 0.01f), 0.0f, 1.0f);
+		const float Recovery = FMath::InterpEaseOut(1.0f, 0.0f, AttackAlpha, bVisualHeavyAttack ? 2.8f : 3.8f);
+		const bool bFinisher = !bVisualHeavyAttack && VisualComboStep == 2;
+		const float SwingDirection = bVisualHeavyAttack || VisualComboStep % 2 == 1 ? 1.0f : -1.0f;
+		const float SwingDegrees = bVisualHeavyAttack ? 132.0f : bFinisher ? 112.0f : 91.0f;
+		AxeRotation = ThorgrimAxeRestingRotation
+			+ FRotator(-12.0f * Recovery, SwingDirection * 8.0f * Recovery, SwingDegrees * SwingDirection * Recovery);
+		AxeOffset = ThorgrimAxeRestingLocation + FVector(10.0f * Recovery, 0.0f, 5.0f * Recovery);
+		ShieldRotation = ThorgrimShieldRestingRotation + FRotator(0.0f, -6.0f * SwingDirection * Recovery, -8.0f * SwingDirection * Recovery);
+		VisualRotation.Pitch -= (bVisualHeavyAttack ? 9.0f : 5.5f) * Recovery;
+		VisualRotation.Yaw -= 7.0f * SwingDirection * Recovery;
+		VisualOffset.X += (bVisualHeavyAttack ? 9.0f : 5.0f) * Recovery;
+	}
+
+	const float DodgeElapsed = Now - VisualDodgeStartTime;
+	if (DodgeElapsed >= 0.0f && DodgeElapsed < 0.30f)
+	{
+		const float DodgeAlpha = FMath::Clamp(DodgeElapsed / 0.30f, 0.0f, 1.0f);
+		const float DodgeEnvelope = FMath::Sin(DodgeAlpha * UE_PI);
+		const FVector LocalDodge = GetActorTransform().InverseTransformVectorNoScale(
+			VisualDodgeDirection.GetSafeNormal2D());
+		VisualRotation.Pitch -= LocalDodge.X * 18.0f * DodgeEnvelope;
+		VisualRotation.Roll += LocalDodge.Y * 21.0f * DodgeEnvelope;
+		VisualOffset.Z -= 4.0f * DodgeEnvelope;
+		AxeRotation += FRotator(0.0f, 0.0f, -12.0f * LocalDodge.Y * DodgeEnvelope);
+		ShieldRotation += FRotator(0.0f, 0.0f, 10.0f * LocalDodge.Y * DodgeEnvelope);
+	}
+
+	const float HurtElapsed = Now - VisualHurtStartTime;
+	if (HurtElapsed >= 0.0f && HurtElapsed < 0.18f)
+	{
+		const float HurtEnvelope = 1.0f - HurtElapsed / 0.18f;
+		VisualRotation.Pitch += 9.0f * HurtEnvelope;
+		VisualRotation.Roll -= 4.0f * HurtEnvelope;
+		VisualOffset.Z += 2.0f * HurtEnvelope;
+	}
+
+	if (bVisualDead)
+	{
+		const float DeathAlpha = FMath::Clamp((Now - VisualDeathStartTime) / 0.55f, 0.0f, 1.0f);
+		const float DeathEase = FMath::InterpEaseOut(0.0f, 1.0f, DeathAlpha, 2.0f);
+		VisualOffset = FVector(0.0f, 0.0f, -44.0f * DeathEase);
+		VisualRotation = FRotator(8.0f * DeathEase, -9.0f * DeathEase, 74.0f * DeathEase);
+		BodyOffset = FVector::ZeroVector;
+	}
+
+	ThorgrimVisualRoot->SetRelativeLocation(ThorgrimVisualRestingLocation + VisualOffset);
+	ThorgrimVisualRoot->SetWorldRotation(FRotator(
+		ThorgrimVisualRestingRotation.Pitch + VisualRotation.Pitch,
+		VisualFacingYaw + ThorgrimVisualRestingRotation.Yaw + VisualRotation.Yaw,
+		ThorgrimVisualRestingRotation.Roll + VisualRotation.Roll));
+	ThorgrimBodyRoot->SetRelativeLocation(ThorgrimBodyRestingLocation + BodyOffset);
+	ThorgrimAxeRoot->SetRelativeLocation(AxeOffset);
+	ThorgrimAxeRoot->SetRelativeRotation(AxeRotation);
+	ThorgrimShieldRoot->SetRelativeLocation(ShieldOffset);
+	ThorgrimShieldRoot->SetRelativeRotation(ShieldRotation);
 }
 
 void AEmberdeepCharacter::UpdateMouseAim()
@@ -617,16 +755,18 @@ void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& Attack
 void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack, int32 HitCount, int32 ComboStep)
 {
 	const bool bComboFinisher = !bHeavyAttack && ComboStep == 2;
-	const float SwingDegrees = bHeavyAttack ? 125.0f : bComboFinisher ? 108.0f : 85.0f;
-	const float SwingDuration = bHeavyAttack ? 0.20f : 0.13f;
-	const float SwingDirection = bHeavyAttack || ComboStep % 2 == 1 ? 1.0f : -1.0f;
-	ThorgrimAxeRoot->SetRelativeRotation(
-		ThorgrimAxeRestingRotation + FRotator(0.0f, 0.0f, SwingDegrees * SwingDirection));
+	const float SwingDuration = bHeavyAttack ? 0.34f : bComboFinisher ? 0.28f : 0.22f;
+	VisualAttackStartTime = GetWorld()->GetTimeSeconds();
+	VisualAttackDuration = SwingDuration;
+	bVisualHeavyAttack = bHeavyAttack;
+	VisualComboStep = ComboStep;
+	++AttackVisualSequence;
+	ApplySteppedVisualPose(true);
 
 	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
 	AEmberdeepCombatFeedback::SpawnSwing(
 		GetWorld(),
-		GetActorLocation() + Forward * (bHeavyAttack ? 145.0f : 110.0f) + FVector(0.0f, 0.0f, 55.0f),
+		GetActorLocation() + FVector(0.0f, 0.0f, 42.0f),
 		Forward,
 		bHeavyAttack || bComboFinisher,
 		HitCount > 0);
@@ -662,7 +802,10 @@ void AEmberdeepCharacter::MulticastPlayAttackVisual_Implementation(bool bHeavyAt
 
 void AEmberdeepCharacter::MulticastPlayDodgeVisual_Implementation(FVector_NetQuantizeNormal DodgeDirection)
 {
-	AEmberdeepCombatFeedback::SpawnDodge(GetWorld(), GetActorLocation(), FVector(DodgeDirection));
+	VisualDodgeStartTime = GetWorld()->GetTimeSeconds();
+	VisualDodgeDirection = FVector(DodgeDirection).GetSafeNormal2D();
+	ApplySteppedVisualPose(true);
+	AEmberdeepCombatFeedback::SpawnDodge(GetWorld(), GetActorLocation(), VisualDodgeDirection);
 }
 
 void AEmberdeepCharacter::ServerDodge_Implementation(FVector_NetQuantizeNormal RequestedDodgeDirection)
@@ -680,7 +823,9 @@ void AEmberdeepCharacter::OnRep_AimDirection()
 
 void AEmberdeepCharacter::ResetAttackVisual()
 {
-	ThorgrimAxeRoot->SetRelativeRotation(ThorgrimAxeRestingRotation);
+	VisualAttackStartTime = -100.0f;
+	VisualAttackDuration = 0.0f;
+	ApplySteppedVisualPose(true);
 }
 
 void AEmberdeepCharacter::EndDodge()
@@ -715,15 +860,21 @@ void AEmberdeepCharacter::MulticastPlayHurtVisual_Implementation(float Damage, b
 
 void AEmberdeepCharacter::PlayHurtVisual(float Damage, bool bFatal)
 {
-	for (UMaterialInstanceDynamic* Material : ThorgrimMaterials)
+	const FLinearColor HitTint = bFatal
+		? FLinearColor::FromSRGBColor(FColor(68, 8, 3))
+		: FLinearColor::FromSRGBColor(FColor(255, 54, 20));
+	const int32 MaterialCount = FMath::Min(ThorgrimMaterials.Num(), ThorgrimMaterialBaseColors.Num());
+	for (int32 Index = 0; Index < MaterialCount; ++Index)
 	{
-		if (Material)
+		if (ThorgrimMaterials[Index])
 		{
-			Material->SetVectorParameterValue(TEXT("Color"), bFatal
-				? FLinearColor(0.18f, 0.005f, 0.002f)
-				: FLinearColor(1.0f, 0.08f, 0.025f));
+			ThorgrimMaterials[Index]->SetVectorParameterValue(
+				TEXT("Color"),
+				FMath::Lerp(ThorgrimMaterialBaseColors[Index], HitTint, bFatal ? 0.80f : 0.62f));
 		}
 	}
+	VisualHurtStartTime = GetWorld()->GetTimeSeconds();
+	ApplySteppedVisualPose(true);
 	AEmberdeepCombatFeedback::SpawnPlayerHurt(GetWorld(), GetActorLocation(), Damage, bFatal);
 	if (IsLocallyControlled())
 	{
@@ -867,6 +1018,9 @@ bool AEmberdeepCharacter::IsDead() const
 
 void AEmberdeepCharacter::HandleDeath()
 {
+	bVisualDead = true;
+	VisualDeathStartTime = GetWorld()->GetTimeSeconds();
+	ApplySteppedVisualPose(true);
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	if (HasAuthority())

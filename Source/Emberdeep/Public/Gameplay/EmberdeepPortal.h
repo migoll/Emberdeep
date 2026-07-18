@@ -6,8 +6,9 @@
 #include "EmberdeepPortal.generated.h"
 
 class UMaterialInstanceDynamic;
+class UInstancedStaticMeshComponent;
 class UPointLightComponent;
-class UStaticMeshComponent;
+class USceneComponent;
 
 UCLASS()
 class EMBERDEEP_API AEmberdeepPortal : public AEmberdeepInteractable
@@ -16,6 +17,7 @@ class EMBERDEEP_API AEmberdeepPortal : public AEmberdeepInteractable
 
 public:
 	AEmberdeepPortal();
+	virtual void Tick(float DeltaSeconds) override;
 	void Configure(EEmberdeepRunStage NewDestination, const FString& NewLabel);
 	virtual FString GetInteractionPrompt(const AEmberdeepCharacter* Character) const override;
 	virtual void Interact(AEmberdeepCharacter* Character, AEmberdeepPlayerController* Controller) override;
@@ -32,16 +34,25 @@ private:
 	void ApplyPortalVisuals();
 
 	UPROPERTY(VisibleAnywhere)
-	TObjectPtr<UStaticMeshComponent> LeftPillar;
+	TObjectPtr<USceneComponent> PortalVisualRoot;
 
 	UPROPERTY(VisibleAnywhere)
-	TObjectPtr<UStaticMeshComponent> RightPillar;
+	TObjectPtr<USceneComponent> PortalGlowRoot;
 
 	UPROPERTY(VisibleAnywhere)
-	TObjectPtr<UStaticMeshComponent> Lintel;
+	TObjectPtr<UInstancedStaticMeshComponent> StoneDarkVoxels;
 
 	UPROPERTY(VisibleAnywhere)
-	TObjectPtr<UStaticMeshComponent> PortalGlow;
+	TObjectPtr<UInstancedStaticMeshComponent> StoneMidVoxels;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UInstancedStaticMeshComponent> StoneEdgeVoxels;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UInstancedStaticMeshComponent> PortalCoreVoxels;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UInstancedStaticMeshComponent> PortalSparkVoxels;
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UPointLightComponent> PortalLight;
@@ -53,7 +64,13 @@ private:
 	FString InteractionLabel = TEXT("Enter the Ashen Crypt");
 
 	UPROPERTY()
-	TArray<TObjectPtr<UMaterialInstanceDynamic>> PortalMaterials;
+	TObjectPtr<UMaterialInstanceDynamic> PortalCoreMaterial;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> PortalSparkMaterial;
+
+	float PortalVisualTime = 0.0f;
+	float PortalLightBaseIntensity = 900.0f;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

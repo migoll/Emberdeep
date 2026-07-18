@@ -11,11 +11,12 @@ class UPointLightComponent;
 class USceneComponent;
 
 /**
- * Replicated, code-generated open dungeon room used by the short-run prototype.
+ * Replicated, code-generated Ashen Crypt combat room.
  *
- * Decorative blocks are palette-batched and have no collision. Only the floor
- * and perimeter use simple collision proxies, which keeps direct-steering enemy
- * AI from becoming trapped on scenery while the navigation layer is still small.
+ * All visible solids share the project's fixed four-centimetre voxel lattice.
+ * Palette batches remain non-colliding; the proven floor and perimeter proxies
+ * preserve the open direct-steering combat space while dense wall-side dressing
+ * supplies the dark-fantasy room silhouette.
  */
 UCLASS()
 class EMBERDEEP_API AEmberdeepDungeonEnvironment : public AActor

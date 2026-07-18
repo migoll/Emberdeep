@@ -11,8 +11,9 @@ class UPointLightComponent;
 class USceneComponent;
 
 /**
- * Replicated end-of-run reward chamber with a clear central chest approach.
- * Gold is intentionally isolated to this room's reward accents.
+ * Replicated end-of-run reliquary built on the shared four-centimetre lattice.
+ * Dense wall-side architecture leaves the central chest approach clear, while
+ * restrained emissive gold is reserved for the legendary reward focal point.
  */
 UCLASS()
 class EMBERDEEP_API AEmberdeepRewardRoomEnvironment : public AActor

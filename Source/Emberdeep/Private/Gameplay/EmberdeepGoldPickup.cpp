@@ -4,6 +4,7 @@
 #include "Components/SphereComponent.h"
 #include "Gameplay/EmberdeepCharacter.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Visual/EmberdeepVoxelStyle.h"
 
@@ -20,12 +21,18 @@ AEmberdeepGoldPickup::AEmberdeepGoldPickup()
 	PickupSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> VoxelMaterial(
+		TEXT("/Game/Emberdeep/Materials/M_VoxelSurface.M_VoxelSurface"));
 	for (int32 ShadeIndex = 0; ShadeIndex < EmberdeepVoxelStyle::ShadeCount; ++ShadeIndex)
 	{
 		const FName MeshName(*FString::Printf(TEXT("GoldVoxels_Shade%d"), ShadeIndex));
 		UInstancedStaticMeshComponent* GoldMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(MeshName);
 		GoldMesh->SetupAttachment(PickupSphere);
 		GoldMesh->SetStaticMesh(CubeMesh.Object);
+		if (VoxelMaterial.Succeeded())
+		{
+			GoldMesh->SetMaterial(0, VoxelMaterial.Object);
+		}
 		GoldMesh->SetMobility(EComponentMobility::Movable);
 		GoldMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		GoldMesh->SetGenerateOverlapEvents(false);
@@ -73,6 +80,9 @@ void AEmberdeepGoldPickup::BeginPlay()
 		if (UMaterialInstanceDynamic* Material = GoldVoxelMeshes[ShadeIndex]->CreateDynamicMaterialInstance(0))
 		{
 			Material->SetVectorParameterValue(TEXT("Color"), EmberdeepVoxelStyle::ShadeColor(GoldColor, ShadeIndex));
+			Material->SetScalarParameterValue(TEXT("Roughness"), 0.72f);
+			Material->SetScalarParameterValue(TEXT("Specular"), 0.10f);
+			Material->SetScalarParameterValue(TEXT("EmissiveStrength"), 1.35f);
 		}
 	}
 }

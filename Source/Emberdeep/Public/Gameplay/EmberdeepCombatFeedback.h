@@ -5,6 +5,7 @@
 #include "EmberdeepCombatFeedback.generated.h"
 
 class UPointLightComponent;
+class UInstancedStaticMeshComponent;
 class USceneComponent;
 class UStaticMeshComponent;
 class UTextRenderComponent;
@@ -41,6 +42,12 @@ private:
 	TObjectPtr<UStaticMeshComponent> Shockwave;
 
 	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> ArcSegments;
+
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> ImpactRing;
+
+	UPROPERTY()
 	TObjectPtr<UTextRenderComponent> DamageText;
 
 	UPROPERTY()
@@ -53,6 +60,8 @@ private:
 	TArray<FRotator> ShardSpin;
 	FVector InitialShockwaveScale = FVector::OneVector;
 	FVector FinalShockwaveScale = FVector::OneVector;
+	FVector InitialRingScale = FVector::OneVector;
+	FVector FinalRingScale = FVector::OneVector;
 	float Age = 0.0f;
 	float Lifetime = 0.45f;
 	float InitialLightIntensity = 0.0f;

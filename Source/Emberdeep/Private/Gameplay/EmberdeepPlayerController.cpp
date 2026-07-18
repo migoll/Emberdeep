@@ -33,6 +33,20 @@ void AEmberdeepPlayerController::BeginPlay()
 		FTimerHandle PreviewTimer;
 		GetWorldTimerManager().SetTimer(PreviewTimer, this, &AEmberdeepPlayerController::ToggleInventory, 1.0f, false);
 	}
+
+	// Visual QA can request a settled gameplay frame instead of capturing the
+	// first render tick while shaders, materials, AI, and camera state are still
+	// warming up. This path is inert in every normal player launch.
+	if (IsLocalController() && FParse::Param(FCommandLine::Get(), TEXT("AutoScreenshot")))
+	{
+		FTimerHandle ScreenshotTimer;
+		FTimerDelegate ScreenshotDelegate = FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_QA Capturing settled gameplay frame"));
+			ConsoleCommand(TEXT("HighResShot 1"), true);
+		});
+		GetWorldTimerManager().SetTimer(ScreenshotTimer, ScreenshotDelegate, 4.0f, false);
+	}
 }
 
 void AEmberdeepPlayerController::ShowMainMenu()

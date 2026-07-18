@@ -6,9 +6,10 @@
 #include "EmberdeepLootContainer.generated.h"
 
 class AEmberdeepPlayerController;
+class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class UPointLightComponent;
-class UStaticMeshComponent;
+class USceneComponent;
 
 UCLASS()
 class EMBERDEEP_API AEmberdeepLootContainer : public AEmberdeepInteractable
@@ -17,6 +18,7 @@ class EMBERDEEP_API AEmberdeepLootContainer : public AEmberdeepInteractable
 
 public:
 	AEmberdeepLootContainer();
+	virtual void Tick(float DeltaSeconds) override;
 
 	void ConfigureLoot(const FString& NewTitle, const TArray<FEmberdeepItemInstance>& NewEntries, bool bAsChest, bool bLegendary);
 	virtual FString GetInteractionPrompt(const AEmberdeepCharacter* Character) const override;
@@ -40,13 +42,46 @@ private:
 	void ApplyVisualState();
 
 	UPROPERTY(VisibleAnywhere)
-	TObjectPtr<UStaticMeshComponent> ContainerBase;
+	TObjectPtr<USceneComponent> ChestLidPivot;
 
 	UPROPERTY(VisibleAnywhere)
-	TObjectPtr<UStaticMeshComponent> ContainerLid;
+	TObjectPtr<USceneComponent> LootGlowRoot;
 
 	UPROPERTY(VisibleAnywhere)
-	TObjectPtr<UStaticMeshComponent> LootGlow;
+	TObjectPtr<UInstancedStaticMeshComponent> ChestWoodVoxels;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UInstancedStaticMeshComponent> ChestPanelVoxels;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UInstancedStaticMeshComponent> ChestIronVoxels;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UInstancedStaticMeshComponent> ChestLegendaryVoxels;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UInstancedStaticMeshComponent> ChestLidWoodVoxels;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UInstancedStaticMeshComponent> ChestLidIronVoxels;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UInstancedStaticMeshComponent> ChestLidLegendaryVoxels;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UInstancedStaticMeshComponent> ChestGlowVoxels;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UInstancedStaticMeshComponent> DropLeatherVoxels;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UInstancedStaticMeshComponent> DropMetalVoxels;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UInstancedStaticMeshComponent> DropLegendaryVoxels;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UInstancedStaticMeshComponent> DropGlowVoxels;
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UPointLightComponent> LootLight;
@@ -67,6 +102,15 @@ private:
 	// through their owning PlayerController instead of globally replicated loot.
 	TArray<FEmberdeepItemInstance> LootEntries;
 	TArray<TWeakObjectPtr<AEmberdeepPlayerController>> Viewers;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> ChestGlowMaterial;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> DropGlowMaterial;
+
+	float LootVisualTime = 0.0f;
+	float LootLightBaseIntensity = 0.0f;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

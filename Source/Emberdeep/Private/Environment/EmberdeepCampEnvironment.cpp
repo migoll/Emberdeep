@@ -24,19 +24,19 @@ namespace
 
 	const FCampPaletteDefinition GCampPaletteDefinitions[] =
 	{
-		{ ECampPalette::GroundDark, TEXT("GroundDark"), FLinearColor::FromSRGBColor(FColor(23, 25, 29)) },
-		{ ECampPalette::GroundMid, TEXT("GroundMid"), FLinearColor::FromSRGBColor(FColor(40, 40, 42)) },
-		{ ECampPalette::StoneDark, TEXT("StoneDark"), FLinearColor::FromSRGBColor(FColor(52, 54, 58)) },
-		{ ECampPalette::Stone, TEXT("Stone"), FLinearColor::FromSRGBColor(FColor(86, 88, 91)) },
-		{ ECampPalette::WoodDark, TEXT("WoodDark"), FLinearColor::FromSRGBColor(FColor(53, 37, 28)) },
-		{ ECampPalette::Wood, TEXT("Wood"), FLinearColor::FromSRGBColor(FColor(90, 58, 34)) },
-		{ ECampPalette::WoodLight, TEXT("WoodLight"), FLinearColor::FromSRGBColor(FColor(138, 87, 40)) },
-		{ ECampPalette::CanvasDark, TEXT("CanvasDark"), FLinearColor::FromSRGBColor(FColor(40, 52, 59)) },
-		{ ECampPalette::Canvas, TEXT("Canvas"), FLinearColor::FromSRGBColor(FColor(75, 90, 94)) },
-		{ ECampPalette::Iron, TEXT("Iron"), FLinearColor::FromSRGBColor(FColor(115, 119, 123)) },
-		{ ECampPalette::Frost, TEXT("Frost"), FLinearColor::FromSRGBColor(FColor(170, 183, 193)) },
-		{ ECampPalette::Ember, TEXT("Ember"), FLinearColor::FromSRGBColor(FColor(180, 71, 22)) },
-		{ ECampPalette::Fire, TEXT("Fire"), FLinearColor::FromSRGBColor(FColor(242, 161, 58)) }
+		{ ECampPalette::GroundDark, TEXT("GroundDark"), FLinearColor::FromSRGBColor(FColor(11, 13, 16)) },
+		{ ECampPalette::GroundMid, TEXT("GroundMid"), FLinearColor::FromSRGBColor(FColor(21, 23, 27)) },
+		{ ECampPalette::StoneDark, TEXT("StoneDark"), FLinearColor::FromSRGBColor(FColor(27, 29, 34)) },
+		{ ECampPalette::Stone, TEXT("Stone"), FLinearColor::FromSRGBColor(FColor(49, 51, 57)) },
+		{ ECampPalette::WoodDark, TEXT("WoodDark"), FLinearColor::FromSRGBColor(FColor(34, 22, 17)) },
+		{ ECampPalette::Wood, TEXT("Wood"), FLinearColor::FromSRGBColor(FColor(69, 40, 23)) },
+		{ ECampPalette::WoodLight, TEXT("WoodLight"), FLinearColor::FromSRGBColor(FColor(112, 67, 31)) },
+		{ ECampPalette::CanvasDark, TEXT("CanvasDark"), FLinearColor::FromSRGBColor(FColor(23, 30, 38)) },
+		{ ECampPalette::Canvas, TEXT("Canvas"), FLinearColor::FromSRGBColor(FColor(48, 59, 68)) },
+		{ ECampPalette::Iron, TEXT("Iron"), FLinearColor::FromSRGBColor(FColor(77, 81, 88)) },
+		{ ECampPalette::Frost, TEXT("Frost"), FLinearColor::FromSRGBColor(FColor(124, 141, 158)) },
+		{ ECampPalette::Ember, TEXT("Ember"), FLinearColor::FromSRGBColor(FColor(160, 47, 12)) },
+		{ ECampPalette::Fire, TEXT("Fire"), FLinearColor::FromSRGBColor(FColor(255, 128, 28)) }
 	};
 
 	const FCampCollisionBox GCampStructuralCollisionBoxes[] =
@@ -63,7 +63,7 @@ AEmberdeepCampEnvironment::AEmberdeepCampEnvironment()
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeAsset(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> MaterialAsset(
-		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+		TEXT("/Game/Emberdeep/Materials/M_VoxelSurface.M_VoxelSurface"));
 	BaseBlockMaterial = MaterialAsset.Object;
 
 	for (const FCampPaletteDefinition& PaletteDefinition : GCampPaletteDefinitions)
@@ -159,19 +159,19 @@ AEmberdeepCampEnvironment::AEmberdeepCampEnvironment()
 	CampfireLight->SetupAttachment(CampRoot);
 	CampfireLight->SetRelativeLocation(GCampPrimaryFireLocation);
 	CampfireLight->SetMobility(EComponentMobility::Movable);
-	CampfireLight->SetIntensity(14000.0f);
-	CampfireLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 132, 66)));
-	CampfireLight->SetAttenuationRadius(980.0f);
-	CampfireLight->SetSourceRadius(55.0f);
+	CampfireLight->SetIntensity(9000.0f);
+	CampfireLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 112, 34)));
+	CampfireLight->SetAttenuationRadius(760.0f);
+	CampfireLight->SetSourceRadius(38.0f);
 	CampfireLight->SetCastShadows(true);
 
 	WagonLanternLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("WagonLanternLight"));
 	WagonLanternLight->SetupAttachment(CampRoot);
 	WagonLanternLight->SetRelativeLocation(GCampWagonLanternLocation);
 	WagonLanternLight->SetMobility(EComponentMobility::Movable);
-	WagonLanternLight->SetIntensity(3500.0f);
-	WagonLanternLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 150, 82)));
-	WagonLanternLight->SetAttenuationRadius(520.0f);
+	WagonLanternLight->SetIntensity(2600.0f);
+	WagonLanternLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 137, 58)));
+	WagonLanternLight->SetAttenuationRadius(420.0f);
 	WagonLanternLight->SetSourceRadius(24.0f);
 	WagonLanternLight->SetCastShadows(false);
 
@@ -179,9 +179,9 @@ AEmberdeepCampEnvironment::AEmberdeepCampEnvironment()
 	ShelterLanternLight->SetupAttachment(CampRoot);
 	ShelterLanternLight->SetRelativeLocation(GCampShelterLanternLocation);
 	ShelterLanternLight->SetMobility(EComponentMobility::Movable);
-	ShelterLanternLight->SetIntensity(3000.0f);
-	ShelterLanternLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 145, 76)));
-	ShelterLanternLight->SetAttenuationRadius(460.0f);
+	ShelterLanternLight->SetIntensity(2300.0f);
+	ShelterLanternLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 132, 52)));
+	ShelterLanternLight->SetAttenuationRadius(390.0f);
 	ShelterLanternLight->SetSourceRadius(22.0f);
 	ShelterLanternLight->SetCastShadows(false);
 
@@ -189,9 +189,9 @@ AEmberdeepCampEnvironment::AEmberdeepCampEnvironment()
 	WorkstationLanternLight->SetupAttachment(CampRoot);
 	WorkstationLanternLight->SetRelativeLocation(GCampWorkstationLanternLocation);
 	WorkstationLanternLight->SetMobility(EComponentMobility::Movable);
-	WorkstationLanternLight->SetIntensity(2800.0f);
-	WorkstationLanternLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 140, 72)));
-	WorkstationLanternLight->SetAttenuationRadius(420.0f);
+	WorkstationLanternLight->SetIntensity(2200.0f);
+	WorkstationLanternLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 126, 46)));
+	WorkstationLanternLight->SetAttenuationRadius(370.0f);
 	WorkstationLanternLight->SetSourceRadius(20.0f);
 	WorkstationLanternLight->SetCastShadows(false);
 }
@@ -240,10 +240,14 @@ void AEmberdeepCampEnvironment::ApplyPaletteMaterials()
 		const int32 ShadeIndex = BatchIndex % EmberdeepVoxelStyle::ShadeCount;
 		const int32 PaletteIndex = BatchIndex / EmberdeepVoxelStyle::ShadeCount;
 		UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(BaseBlockMaterial, this);
-		Material->SetVectorParameterValue(
-			TEXT("Color"),
-			EmberdeepVoxelStyle::ShadeColor(GCampPaletteDefinitions[PaletteIndex].Color, ShadeIndex));
-		PaletteMeshes[BatchIndex]->SetMaterial(0, Material);
+			Material->SetVectorParameterValue(
+				TEXT("Color"),
+				EmberdeepVoxelStyle::ShadeColor(GCampPaletteDefinitions[PaletteIndex].Color, ShadeIndex));
+			Material->SetScalarParameterValue(
+				TEXT("EmissiveStrength"),
+				PaletteIndex == static_cast<int32>(ECampPalette::Fire) ? 4.0f
+					: (PaletteIndex == static_cast<int32>(ECampPalette::Ember) ? 0.45f : 0.11f));
+			PaletteMeshes[BatchIndex]->SetMaterial(0, Material);
 	}
 }
 
@@ -262,5 +266,5 @@ void AEmberdeepCampEnvironment::UpdateCampfireFlicker()
 	LastFlickerStep = FlickerStep;
 
 	static constexpr float FlickerPattern[] = { 0.94f, 1.03f, 0.98f, 1.08f, 0.96f, 1.01f, 0.91f, 1.05f };
-	CampfireLight->SetIntensity(14000.0f * FlickerPattern[FlickerStep % UE_ARRAY_COUNT(FlickerPattern)]);
+	CampfireLight->SetIntensity(9000.0f * FlickerPattern[FlickerStep % UE_ARRAY_COUNT(FlickerPattern)]);
 }

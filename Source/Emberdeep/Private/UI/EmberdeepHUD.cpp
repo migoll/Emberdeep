@@ -1,5 +1,9 @@
 #include "UI/EmberdeepHUD.h"
 
+#include "Components/DirectionalLightComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Components/PostProcessComponent.h"
+#include "Components/SceneComponent.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Texture2D.h"
@@ -14,8 +18,79 @@
 #include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
 
+namespace
+{
+	float GetPresentationUiScale(const UCanvas* Canvas)
+	{
+		return Canvas ? FMath::Clamp(Canvas->ClipY / 1024.0f, 0.80f, 1.45f) : 1.0f;
+	}
+}
+
 AEmberdeepHUD::AEmberdeepHUD()
 {
+	// AHUD is created locally for every owning player, including remote clients.
+	// Housing the visual baseline here avoids server-only GameMode lighting and
+	// guarantees that every view receives the same grade and global fill.
+	SetHidden(false);
+	USceneComponent* PresentationRoot = CreateDefaultSubobject<USceneComponent>(TEXT("PresentationRoot"));
+	PresentationRoot->SetMobility(EComponentMobility::Movable);
+	SetRootComponent(PresentationRoot);
+
+	UDirectionalLightComponent* MoonKeyLight = CreateDefaultSubobject<UDirectionalLightComponent>(TEXT("MoonKeyLight"));
+	MoonKeyLight->SetupAttachment(PresentationRoot);
+	MoonKeyLight->SetRelativeRotation(FRotator(-52.0f, -38.0f, 0.0f));
+	MoonKeyLight->SetMobility(EComponentMobility::Movable);
+	MoonKeyLight->SetIntensity(3.6f);
+	MoonKeyLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(121, 127, 137)));
+	MoonKeyLight->SetCastShadows(true);
+	MoonKeyLight->SetLightSourceAngle(1.5f);
+
+	UPointLightComponent* AmbientFillLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("AmbientFillLight"));
+	AmbientFillLight->SetupAttachment(PresentationRoot);
+	AmbientFillLight->SetRelativeLocation(FVector(0.0f, 0.0f, 900.0f));
+	AmbientFillLight->SetMobility(EComponentMobility::Movable);
+	AmbientFillLight->SetIntensity(26000.0f);
+	AmbientFillLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(135, 123, 110)));
+	AmbientFillLight->SetAttenuationRadius(3600.0f);
+	AmbientFillLight->SetSourceRadius(500.0f);
+	AmbientFillLight->SetCastShadows(false);
+
+	UPostProcessComponent* PresentationPostProcess = CreateDefaultSubobject<UPostProcessComponent>(TEXT("PresentationPostProcess"));
+	PresentationPostProcess->SetupAttachment(PresentationRoot);
+	PresentationPostProcess->bUnbound = true;
+	PresentationPostProcess->BlendWeight = 1.0f;
+	FPostProcessSettings& Settings = PresentationPostProcess->Settings;
+	Settings.bOverride_AutoExposureMethod = true;
+	Settings.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
+	Settings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
+	Settings.AutoExposureApplyPhysicalCameraExposure = 0;
+	Settings.bOverride_AutoExposureBias = true;
+	Settings.AutoExposureBias = 2.0f;
+	Settings.bOverride_ColorSaturation = true;
+	Settings.ColorSaturation = FVector4(0.93f, 0.91f, 0.87f, 1.0f);
+	Settings.bOverride_ColorContrast = true;
+	Settings.ColorContrast = FVector4(1.06f, 1.05f, 1.04f, 1.0f);
+	Settings.bOverride_ColorGain = true;
+	Settings.ColorGain = FVector4(0.98f, 0.99f, 1.0f, 1.0f);
+	Settings.bOverride_ColorOffset = true;
+	Settings.ColorOffset = FVector4(0.004f, 0.004f, 0.006f, 0.0f);
+	Settings.bOverride_VignetteIntensity = true;
+	Settings.VignetteIntensity = 0.28f;
+	Settings.bOverride_AmbientOcclusionIntensity = true;
+	Settings.AmbientOcclusionIntensity = 0.95f;
+	Settings.bOverride_AmbientOcclusionRadius = true;
+	Settings.AmbientOcclusionRadius = 95.0f;
+	Settings.bOverride_BloomIntensity = true;
+	Settings.BloomIntensity = 0.22f;
+	Settings.bOverride_BloomThreshold = true;
+	Settings.BloomThreshold = 2.8f;
+	Settings.bOverride_MotionBlurAmount = true;
+	Settings.MotionBlurAmount = 0.0f;
+	Settings.bOverride_FilmGrainIntensity = true;
+	Settings.FilmGrainIntensity = 0.0f;
+	Settings.bOverride_SceneFringeIntensity = true;
+	Settings.SceneFringeIntensity = 0.0f;
+
 	static ConstructorHelpers::FObjectFinder<UTexture2D> OrnamentTexture(
 		TEXT("/Game/Emberdeep/UI/T_HUDOrnaments.T_HUDOrnaments"));
 	HudOrnaments = OrnamentTexture.Object;
@@ -52,25 +127,32 @@ void AEmberdeepHUD::DrawHUD()
 	{
 		const float Severity = 1.0f - HealthNormalized / 0.32f;
 		const float Pulse = 0.5f + 0.5f * FMath::Sin(GetWorld()->GetTimeSeconds() * 5.5f);
-		const float Alpha = (0.08f + Pulse * 0.12f) * Severity;
-		const float Border = 10.0f + Severity * 14.0f;
-		const FLinearColor WarningColor(0.72f, 0.006f, 0.002f, Alpha);
-		DrawRect(WarningColor, 0.0f, 0.0f, Canvas->ClipX, Border);
-		DrawRect(WarningColor, 0.0f, Canvas->ClipY - Border, Canvas->ClipX, Border);
-		DrawRect(WarningColor, 0.0f, Border, Border, Canvas->ClipY - Border * 2.0f);
-		DrawRect(WarningColor, Canvas->ClipX - Border, Border, Border, Canvas->ClipY - Border * 2.0f);
+		const float EdgeDepth = (44.0f + Severity * 52.0f) * GetPresentationUiScale(Canvas);
+		for (int32 LayerIndex = 0; LayerIndex < 10; ++LayerIndex)
+		{
+			const float LayerAlpha = (1.0f - LayerIndex / 10.0f) * (0.026f + Pulse * 0.026f) * Severity;
+			const float LayerInset = LayerIndex * EdgeDepth / 10.0f;
+			const float LayerThickness = EdgeDepth / 10.0f + 1.0f;
+			const FLinearColor WarningColor(0.62f, 0.004f, 0.002f, LayerAlpha);
+			DrawRect(WarningColor, LayerInset, LayerInset, Canvas->ClipX - LayerInset * 2.0f, LayerThickness);
+			DrawRect(WarningColor, LayerInset, Canvas->ClipY - LayerInset - LayerThickness, Canvas->ClipX - LayerInset * 2.0f, LayerThickness);
+			DrawRect(WarningColor, LayerInset, LayerInset, LayerThickness, Canvas->ClipY - LayerInset * 2.0f);
+			DrawRect(WarningColor, Canvas->ClipX - LayerInset - LayerThickness, LayerInset, LayerThickness, Canvas->ClipY - LayerInset * 2.0f);
+		}
 	}
 
 	FString InteractionPrompt;
 	if (const AEmberdeepPlayerController* EmberdeepController = Cast<AEmberdeepPlayerController>(PlayerOwner);
 		EmberdeepController && EmberdeepController->GetClosestInteractionPrompt(InteractionPrompt))
 	{
+		const float UiScale = GetPresentationUiScale(Canvas);
 		float PromptWidth = 0.0f;
 		float PromptHeight = 0.0f;
 		const FString Prompt = FString::Printf(TEXT("[F]  %s"), *InteractionPrompt);
-		GetTextSize(Prompt, PromptWidth, PromptHeight, GEngine->GetSmallFont(), 1.05f);
-		DrawPanel(Canvas->ClipX * 0.5f - PromptWidth * 0.5f - 16.0f, Canvas->ClipY * 0.70f - 8.0f, PromptWidth + 32.0f, 32.0f);
-		DrawCenteredText(Prompt, FLinearColor(1.0f, 0.70f, 0.25f), Canvas->ClipX * 0.5f, Canvas->ClipY * 0.70f, GEngine->GetSmallFont(), 1.05f);
+		GetTextSize(Prompt, PromptWidth, PromptHeight, GEngine->GetSmallFont(), UiScale);
+		const float PromptY = Canvas->ClipY * 0.72f;
+		DrawPanel(Canvas->ClipX * 0.5f - PromptWidth * 0.5f - 16.0f * UiScale, PromptY - 8.0f * UiScale, PromptWidth + 32.0f * UiScale, 30.0f * UiScale);
+		DrawCenteredText(Prompt, FLinearColor(1.0f, 0.70f, 0.25f), Canvas->ClipX * 0.5f, PromptY, GEngine->GetSmallFont(), UiScale);
 	}
 
 	TArray<AActor*> Enemies;
@@ -88,12 +170,13 @@ void AEmberdeepHUD::DrawHUD()
 			Enemy->GetActorLocation() + FVector(0.0f, 0.0f, Enemy->IsElite() ? 155.0f : 115.0f),
 			ScreenPosition))
 		{
-			const float EnemyBarWidth = Enemy->IsElite() ? 112.0f : 76.0f;
+			const float UiScale = FMath::Min(GetPresentationUiScale(Canvas), 1.25f);
+			const float EnemyBarWidth = (Enemy->IsElite() ? 112.0f : 76.0f) * UiScale;
 			DrawBar(
 				ScreenPosition.X - EnemyBarWidth * 0.5f,
 				ScreenPosition.Y,
 				EnemyBarWidth,
-				Enemy->IsElite() ? 10.0f : 7.0f,
+				(Enemy->IsElite() ? 10.0f : 7.0f) * UiScale,
 				Enemy->GetHealthComponent()->GetHealthNormalized(),
 				Enemy->IsAttackWindingUp()
 					? FLinearColor(1.0f, 0.34f, 0.015f)
@@ -101,7 +184,7 @@ void AEmberdeepHUD::DrawHUD()
 
 			if (Enemy->IsElite())
 			{
-				DrawCenteredText(TEXT("BONE WARDEN"), FLinearColor(0.92f, 0.55f, 0.18f), ScreenPosition.X, ScreenPosition.Y - 18.0f, GEngine->GetSmallFont(), 0.85f);
+				DrawCenteredText(TEXT("BONE WARDEN"), FLinearColor(0.92f, 0.55f, 0.18f), ScreenPosition.X, ScreenPosition.Y - 18.0f * UiScale, GEngine->GetSmallFont(), 0.85f * UiScale);
 			}
 		}
 	}
@@ -120,9 +203,18 @@ void AEmberdeepHUD::DrawPartyRoster()
 		return;
 	}
 
-	const float StartX = 20.0f;
-	const float StartY = 18.0f;
-	const float RowHeight = 58.0f;
+	const float UiScale = GetPresentationUiScale(Canvas);
+	const float StartX = 18.0f * UiScale;
+	const float StartY = 16.0f * UiScale;
+	const float RowHeight = 70.0f * UiScale;
+	const FLinearColor PartyColors[] =
+	{
+		FLinearColor(0.96f, 0.63f, 0.23f),
+		FLinearColor(0.58f, 0.78f, 0.28f),
+		FLinearColor(0.25f, 0.62f, 0.95f),
+		FLinearColor(0.90f, 0.82f, 0.56f),
+		FLinearColor(0.73f, 0.42f, 0.86f)
+	};
 	for (int32 PlayerIndex = 0; PlayerIndex < GameState->PlayerArray.Num() && PlayerIndex < 5; ++PlayerIndex)
 	{
 		const APlayerState* PlayerState = GameState->PlayerArray[PlayerIndex];
@@ -135,44 +227,89 @@ void AEmberdeepHUD::DrawPartyRoster()
 		}
 
 		const float Y = StartY + PlayerIndex * RowHeight;
-		DrawOrnamentSection(StartX, Y, 50.0f, 50.0f, 580.0f, 170.0f, 280.0f, 270.0f);
-		DrawPanel(StartX + 48.0f, Y + 5.0f, 142.0f, 40.0f);
+		const float PortraitSize = 56.0f * UiScale;
+		DrawOrnamentSection(StartX, Y, PortraitSize, PortraitSize, 580.0f, 170.0f, 280.0f, 270.0f);
+		// A compact block portrait keeps the class readable until final portrait
+		// art is authored, instead of presenting an empty black aperture.
+		DrawRect(FLinearColor(0.055f, 0.035f, 0.03f), StartX + 9.0f * UiScale, Y + 10.0f * UiScale, 38.0f * UiScale, 36.0f * UiScale);
+		DrawRect(FLinearColor(0.17f, 0.18f, 0.20f), StartX + 13.0f * UiScale, Y + 33.0f * UiScale, 30.0f * UiScale, 12.0f * UiScale);
+		DrawRect(FLinearColor(0.34f, 0.35f, 0.36f), StartX + 18.0f * UiScale, Y + 15.0f * UiScale, 20.0f * UiScale, 21.0f * UiScale);
+		DrawRect(FLinearColor(0.13f, 0.14f, 0.16f), StartX + 16.0f * UiScale, Y + 12.0f * UiScale, 24.0f * UiScale, 9.0f * UiScale);
+		DrawRect(PartyColors[PlayerIndex], StartX + 20.0f * UiScale, Y + 25.0f * UiScale, 16.0f * UiScale, 3.0f * UiScale);
+
+		DrawPanel(StartX + 54.0f * UiScale, Y + 5.0f * UiScale, 154.0f * UiScale, 45.0f * UiScale);
 		DrawText(
 			FString::Printf(TEXT("P%d  FIGHTER"), PlayerIndex + 1),
-			PlayerIndex == 0 ? FLinearColor(0.95f, 0.62f, 0.24f) : FLinearColor(0.82f, 0.82f, 0.78f),
-			StartX + 56.0f,
-			Y + 6.0f,
+			PartyColors[PlayerIndex],
+			StartX + 62.0f * UiScale,
+			Y + 7.0f * UiScale,
 			GEngine->GetSmallFont(),
-			0.95f,
+			0.92f * UiScale,
 			false);
 
 		const UEmberdeepHealthComponent* PartyHealth = PartyCharacter->GetHealthComponent();
-		DrawBar(StartX + 56.0f, Y + 27.0f, 125.0f, 11.0f, PartyHealth->GetHealthNormalized(), FLinearColor(0.66f, 0.025f, 0.018f));
+		DrawBar(StartX + 62.0f * UiScale, Y + 29.0f * UiScale, 136.0f * UiScale, 12.0f * UiScale, PartyHealth->GetHealthNormalized(), FLinearColor(0.66f, 0.025f, 0.018f));
 		DrawCenteredText(
 			FString::Printf(TEXT("%.0f/%.0f"), PartyHealth->GetCurrentHealth(), PartyHealth->GetMaxHealth()),
-			FLinearColor::White, StartX + 118.5f, Y + 25.0f, GEngine->GetSmallFont(), 0.72f);
+			FLinearColor::White, StartX + 130.0f * UiScale, Y + 27.0f * UiScale, GEngine->GetSmallFont(), 0.72f * UiScale);
 	}
 }
 
 void AEmberdeepHUD::DrawMinimapAndObjective()
 {
-	const float MapWidth = 195.0f;
-	const float MapHeight = 138.0f;
-	const float MapX = Canvas->ClipX - MapWidth - 26.0f;
-	const float MapY = 20.0f;
-	DrawOrnamentSection(MapX - 10.0f, MapY - 8.0f, MapWidth + 20.0f, MapHeight + 19.0f, 990.0f, 25.0f, 520.0f, 505.0f);
-	DrawRect(FLinearColor(0.035f, 0.035f, 0.038f, 0.92f), MapX + 11.0f, MapY + 16.0f, MapWidth - 22.0f, MapHeight - 32.0f);
-	DrawRect(FLinearColor(0.16f, 0.16f, 0.17f, 0.95f), MapX + 24.0f, MapY + 31.0f, MapWidth - 48.0f, MapHeight - 62.0f);
+	const float UiScale = GetPresentationUiScale(Canvas);
+	const float MapWidth = 235.0f * UiScale;
+	const float MapHeight = 172.0f * UiScale;
+	const float MapX = Canvas->ClipX - MapWidth - 22.0f * UiScale;
+	const float MapY = 18.0f * UiScale;
+	DrawOrnamentSection(
+		MapX - 11.0f * UiScale,
+		MapY - 9.0f * UiScale,
+		MapWidth + 22.0f * UiScale,
+		MapHeight + 21.0f * UiScale,
+		990.0f,
+		25.0f,
+		520.0f,
+		505.0f);
+
+	const float InnerX = MapX + 14.0f * UiScale;
+	const float InnerY = MapY + 19.0f * UiScale;
+	const float InnerWidth = MapWidth - 28.0f * UiScale;
+	const float InnerHeight = MapHeight - 38.0f * UiScale;
+	DrawRect(FLinearColor(0.012f, 0.013f, 0.015f, 0.98f), InnerX, InnerY, InnerWidth, InnerHeight);
 
 	const AEmberdeepGameState* EmberdeepGameState = GetWorld()->GetGameState<AEmberdeepGameState>();
 	const EEmberdeepRunStage Stage = EmberdeepGameState ? EmberdeepGameState->GetRunStage() : EEmberdeepRunStage::Camp;
+	const float StageInset = Stage == EEmberdeepRunStage::RewardRoom ? 22.0f * UiScale : 10.0f * UiScale;
+	const float FloorX = InnerX + StageInset;
+	const float FloorY = InnerY + StageInset * 0.72f;
+	const float FloorWidth = InnerWidth - StageInset * 2.0f;
+	const float FloorHeight = InnerHeight - StageInset * 1.44f;
+	DrawRect(FLinearColor(0.26f, 0.25f, 0.24f, 0.96f), FloorX - 3.0f * UiScale, FloorY - 3.0f * UiScale, FloorWidth + 6.0f * UiScale, FloorHeight + 6.0f * UiScale);
+	DrawRect(FLinearColor(0.075f, 0.075f, 0.078f, 0.98f), FloorX, FloorY, FloorWidth, FloorHeight);
+	// Subtle room seams read as an authored floor plan instead of a debug slab.
+	for (int32 GridIndex = 1; GridIndex < 4; ++GridIndex)
+	{
+		DrawRect(FLinearColor(0.13f, 0.125f, 0.12f, 0.62f), FloorX + FloorWidth * GridIndex / 4.0f, FloorY, 1.0f * UiScale, FloorHeight);
+	}
+	for (int32 GridIndex = 1; GridIndex < 3; ++GridIndex)
+	{
+		DrawRect(FLinearColor(0.13f, 0.125f, 0.12f, 0.62f), FloorX, FloorY + FloorHeight * GridIndex / 3.0f, FloorWidth, 1.0f * UiScale);
+	}
+	if (Stage == EEmberdeepRunStage::Dungeon)
+	{
+		const float SealSize = 16.0f * UiScale;
+		DrawRect(FLinearColor(0.34f, 0.12f, 0.09f, 0.75f), FloorX + FloorWidth * 0.5f - SealSize * 0.5f, FloorY + FloorHeight * 0.5f - 2.0f * UiScale, SealSize, 4.0f * UiScale);
+		DrawRect(FLinearColor(0.24f, 0.09f, 0.31f, 0.75f), FloorX + FloorWidth * 0.5f - 2.0f * UiScale, FloorY + FloorHeight * 0.5f - SealSize * 0.5f, 4.0f * UiScale, SealSize);
+	}
+
 	const float WorldHalfWidth = Stage == EEmberdeepRunStage::RewardRoom ? 600.0f : 900.0f;
 	const float WorldHalfHeight = Stage == EEmberdeepRunStage::RewardRoom ? 450.0f : 700.0f;
-	const auto WorldToMap = [MapX, MapY, MapWidth, MapHeight, WorldHalfWidth, WorldHalfHeight](const FVector& WorldLocation)
+	const auto WorldToMap = [FloorX, FloorY, FloorWidth, FloorHeight, WorldHalfWidth, WorldHalfHeight](const FVector& WorldLocation)
 	{
 		return FVector2D(
-			MapX + 24.0f + FMath::Clamp((WorldLocation.X + WorldHalfWidth) / (WorldHalfWidth * 2.0f), 0.0f, 1.0f) * (MapWidth - 48.0f),
-			MapY + 31.0f + FMath::Clamp((WorldLocation.Y + WorldHalfHeight) / (WorldHalfHeight * 2.0f), 0.0f, 1.0f) * (MapHeight - 62.0f));
+			FloorX + FMath::Clamp((WorldLocation.X + WorldHalfWidth) / (WorldHalfWidth * 2.0f), 0.0f, 1.0f) * FloorWidth,
+			FloorY + FMath::Clamp((WorldLocation.Y + WorldHalfHeight) / (WorldHalfHeight * 2.0f), 0.0f, 1.0f) * FloorHeight);
 	};
 
 	if (const AGameStateBase* GameState = GetWorld()->GetGameState<AGameStateBase>())
@@ -182,17 +319,25 @@ void AEmberdeepHUD::DrawMinimapAndObjective()
 			if (const APawn* Pawn = PlayerState ? PlayerState->GetPawn() : nullptr)
 			{
 				const FVector2D Marker = WorldToMap(Pawn->GetActorLocation());
-				DrawRect(FLinearColor(0.08f, 0.58f, 1.0f), Marker.X - 3.0f, Marker.Y - 3.0f, 6.0f, 6.0f);
+				const float MarkerSize = 7.0f * UiScale;
+				DrawRect(FLinearColor(0.02f, 0.24f, 0.36f), Marker.X - MarkerSize * 0.65f, Marker.Y - MarkerSize * 0.65f, MarkerSize * 1.3f, MarkerSize * 1.3f);
+				DrawRect(FLinearColor(0.10f, 0.72f, 1.0f), Marker.X - MarkerSize * 0.5f, Marker.Y - MarkerSize * 0.5f, MarkerSize, MarkerSize);
 			}
 		}
 	}
 
 	TArray<AActor*> Enemies;
 	UGameplayStatics::GetAllActorsOfClass(this, AEmberdeepEnemy::StaticClass(), Enemies);
-	for (const AActor* Enemy : Enemies)
+	for (const AActor* EnemyActor : Enemies)
 	{
+		const AEmberdeepEnemy* Enemy = Cast<AEmberdeepEnemy>(EnemyActor);
+		if (!Enemy || Enemy->GetHealthComponent()->IsDead())
+		{
+			continue;
+		}
 		const FVector2D Marker = WorldToMap(Enemy->GetActorLocation());
-		DrawRect(FLinearColor(0.88f, 0.055f, 0.025f), Marker.X - 2.0f, Marker.Y - 2.0f, 4.0f, 4.0f);
+		const float MarkerSize = Enemy->IsElite() ? 6.0f * UiScale : 4.0f * UiScale;
+		DrawRect(FLinearColor(0.78f, 0.035f, 0.018f), Marker.X - MarkerSize * 0.5f, Marker.Y - MarkerSize * 0.5f, MarkerSize, MarkerSize);
 	}
 
 	FString ObjectiveTitle;
@@ -220,16 +365,27 @@ void AEmberdeepHUD::DrawMinimapAndObjective()
 		StatusText = bObjectiveComplete ? TEXT("Cinder Vault unlocked") : FString::Printf(TEXT("Enemies remaining: %d"), EmberdeepGameState ? EmberdeepGameState->GetRemainingEnemies() : 0);
 	}
 
-	DrawText(ObjectiveTitle, FLinearColor(0.95f, 0.62f, 0.20f), MapX, MapY + MapHeight + 16.0f, GEngine->GetSmallFont(), 1.0f, false);
-	DrawText(ObjectiveText, FLinearColor(0.82f, 0.80f, 0.74f), MapX, MapY + MapHeight + 39.0f, GEngine->GetSmallFont(), 0.9f, false);
-	DrawRect(bObjectiveComplete ? FLinearColor(0.82f, 0.55f, 0.12f) : FLinearColor(0.14f, 0.13f, 0.12f), MapX, MapY + MapHeight + 65.0f, 12.0f, 12.0f);
+	const float QuestY = MapY + MapHeight + 16.0f * UiScale;
+	DrawRect(FLinearColor(0.008f, 0.008f, 0.009f, 0.78f), MapX - 6.0f * UiScale, QuestY - 8.0f * UiScale, MapWidth + 12.0f * UiScale, 84.0f * UiScale);
+	DrawText(ObjectiveTitle, FLinearColor(0.96f, 0.63f, 0.22f), MapX, QuestY, GEngine->GetSmallFont(), 1.0f * UiScale, false);
+	DrawText(ObjectiveText, FLinearColor(0.86f, 0.84f, 0.78f), MapX, QuestY + 23.0f * UiScale, GEngine->GetSmallFont(), 0.88f * UiScale, false);
+	const float CheckX = MapX;
+	const float CheckY = QuestY + 51.0f * UiScale;
+	const float CheckSize = 13.0f * UiScale;
+	DrawRect(FLinearColor(0.54f, 0.42f, 0.24f), CheckX, CheckY, CheckSize, CheckSize);
+	DrawRect(FLinearColor(0.035f, 0.032f, 0.029f), CheckX + 2.0f * UiScale, CheckY + 2.0f * UiScale, CheckSize - 4.0f * UiScale, CheckSize - 4.0f * UiScale);
+	if (bObjectiveComplete)
+	{
+		DrawRect(FLinearColor(0.96f, 0.66f, 0.18f), CheckX + 3.0f * UiScale, CheckY + 6.0f * UiScale, 4.0f * UiScale, 3.0f * UiScale);
+		DrawRect(FLinearColor(0.96f, 0.66f, 0.18f), CheckX + 6.0f * UiScale, CheckY + 4.0f * UiScale, 5.0f * UiScale, 3.0f * UiScale);
+	}
 	DrawText(
 		StatusText,
-		FLinearColor(0.76f, 0.74f, 0.68f),
-		MapX + 21.0f,
-		MapY + MapHeight + 62.0f,
+		FLinearColor(0.78f, 0.76f, 0.70f),
+		MapX + 21.0f * UiScale,
+		QuestY + 49.0f * UiScale,
 		GEngine->GetSmallFont(),
-		0.85f,
+		0.82f * UiScale,
 		false);
 }
 
@@ -237,14 +393,17 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 {
 	constexpr float DesignWidth = 2167.0f;
 	constexpr float DesignHeight = 503.0f;
-	// Stay compact in ordinary windows, grow through 1080p, then stop growing.
-	// At 1280 this is 640px; at 1920 it is 960px; at 1440p it caps at 980px.
-	const float TargetWidth = FMath::Clamp(Canvas->ClipX * 0.50f, 560.0f, 980.0f);
+	// Scale from viewport height so the connected assembly holds the same visual
+	// weight at 1080p, 1440p and ultrawide resolutions. At the 3:2 target this is
+	// 60% of the screen; at 16:9 it is roughly 51%.
+	const float MaximumWidth = Canvas->ClipX * 0.60f;
+	const float MinimumWidth = FMath::Min(560.0f, MaximumWidth);
+	const float TargetWidth = FMath::Clamp(Canvas->ClipY * 0.90f, MinimumWidth, MaximumWidth);
 	const float Scale = TargetWidth / DesignWidth;
 	const float HudWidth = DesignWidth * Scale;
 	const float HudHeight = DesignHeight * Scale;
 	const float HudX = (Canvas->ClipX - HudWidth) * 0.5f;
-	const float HudY = Canvas->ClipY - HudHeight - 4.0f;
+	const float HudY = Canvas->ClipY - HudHeight;
 	const auto DesignPoint = [HudX, HudY, Scale](float X, float Y)
 	{
 		return FVector2D(HudX + X * Scale, HudY + Y * Scale);
@@ -358,14 +517,6 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 			FMath::Clamp(Scale * 1.7f, 0.62f, 0.92f));
 	}
 	DrawCenteredText(
-		TEXT("0"),
-		FLinearColor::White,
-		HudX + (SlotBounds[4].X + SlotBounds[4].Z - 12.0f) * Scale,
-		HudY + 365.0f * Scale,
-		GEngine->GetSmallFont(),
-		FMath::Clamp(Scale * 1.8f, 0.65f, 0.95f));
-
-	DrawCenteredText(
 		FString::Printf(TEXT("%.0f / %.0f"), Character->GetHealthComponent()->GetCurrentHealth(), Character->GetHealthComponent()->GetMaxHealth()),
 		FLinearColor::White,
 		HealthCenter.X,
@@ -373,8 +524,8 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 		GEngine->GetSmallFont(),
 		FMath::Clamp(Scale * 1.55f, 0.62f, 0.86f));
 	DrawCenteredText(
-		FString::Printf(TEXT("LEVEL %d     GOLD %d     DAMAGE +%.0f     ARMOR +%.0f     [I] INVENTORY"),
-			Character->GetCharacterLevel(), Character->GetGold(), Character->GetEquipmentDamageBonus(), Character->GetEquipmentArmorBonus()),
+		FString::Printf(TEXT("LEVEL %d          GOLD %d"),
+			Character->GetCharacterLevel(), Character->GetGold()),
 		FLinearColor(1.0f, 0.66f, 0.16f),
 		Canvas->ClipX * 0.5f,
 		HudY + 463.0f * Scale,
@@ -428,12 +579,38 @@ void AEmberdeepHUD::DrawOrb(
 	{
 		const float HalfWidth = FMath::Sqrt(FMath::Max(0.0f, Radius * Radius - OffsetY * OffsetY));
 		const float RowY = Center.Y + OffsetY;
+		const float EdgeAlpha = FMath::Clamp(HalfWidth / FMath::Max(Radius, 1.0f), 0.0f, 1.0f);
+		const float VerticalAlpha = FMath::Clamp((OffsetY + Radius) / FMath::Max(Radius * 2.0f, 1.0f), 0.0f, 1.0f);
+		FLinearColor LiquidColor = FillColor * (0.52f + VerticalAlpha * 0.58f);
+		LiquidColor = FMath::Lerp(LiquidColor * 0.58f, LiquidColor, EdgeAlpha);
+		LiquidColor.A = 1.0f;
 		DrawRect(
-			RowY >= FillTop ? FillColor : FLinearColor(0.035f, 0.025f, 0.03f, 0.98f),
+			RowY >= FillTop ? LiquidColor : FLinearColor(0.025f, 0.018f, 0.024f, 0.99f),
 			Center.X - HalfWidth,
 			RowY,
 			HalfWidth * 2.0f,
 			2.0f);
+	}
+	if (ClampedValue > 0.02f)
+	{
+		const float SurfaceHalfWidth = FMath::Sqrt(FMath::Max(0.0f, Radius * Radius - FMath::Square(FillTop - Center.Y)));
+		DrawRect(
+			FLinearColor(1.0f, 0.70f, 0.44f, 0.28f),
+			Center.X - SurfaceHalfWidth * 0.72f,
+			FillTop,
+			SurfaceHalfWidth * 1.44f,
+			FMath::Max(2.0f, Radius * 0.025f));
+	}
+	// Small stepped specular glint keeps the liquid dimensional without smooth
+	// gradients that fight the low-resolution presentation.
+	const FVector2D GlintCenter = Center + FVector2D(-Radius * 0.28f, -Radius * 0.30f);
+	for (int32 GlintRow = 0; GlintRow < 4; ++GlintRow)
+	{
+		const float GlintY = GlintCenter.Y + GlintRow * 2.0f;
+		if (GlintY >= FillTop)
+		{
+			DrawRect(FLinearColor(1.0f, 0.92f, 0.82f, 0.10f + GlintRow * 0.025f), GlintCenter.X - (4 - GlintRow) * 2.0f, GlintY, (8 - GlintRow * 2.0f) * 2.0f, 2.0f);
+		}
 	}
 }
 

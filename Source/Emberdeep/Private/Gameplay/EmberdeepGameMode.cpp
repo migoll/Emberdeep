@@ -1,11 +1,6 @@
 #include "Gameplay/EmberdeepGameMode.h"
 
-#include "Components/DirectionalLightComponent.h"
-#include "Components/PointLightComponent.h"
 #include "Emberdeep.h"
-#include "Engine/DirectionalLight.h"
-#include "Engine/PointLight.h"
-#include "Engine/PostProcessVolume.h"
 #include "EngineUtils.h"
 #include "Environment/EmberdeepCampEnvironment.h"
 #include "Environment/EmberdeepDungeonEnvironment.h"
@@ -42,6 +37,10 @@ void AEmberdeepGameMode::StartPlay()
 		if (FParse::Param(FCommandLine::Get(), TEXT("AutoRunSmoke")))
 		{
 			EnterRunStage(EEmberdeepRunStage::Dungeon);
+		}
+		else if (FParse::Param(FCommandLine::Get(), TEXT("AutoRewardSmoke")))
+		{
+			EnterRunStage(EEmberdeepRunStage::RewardRoom);
 		}
 	}
 }
@@ -408,48 +407,6 @@ void AEmberdeepGameMode::RegisterStageActor(AActor* Actor)
 
 void AEmberdeepGameMode::SpawnWorldLighting()
 {
-	APostProcessVolume* ExposureVolume = GetWorld()->SpawnActor<APostProcessVolume>();
-	if (ExposureVolume)
-	{
-		ExposureVolume->bUnbound = true;
-		ExposureVolume->Settings.bOverride_AutoExposureMethod = true;
-		ExposureVolume->Settings.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
-		ExposureVolume->Settings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
-		ExposureVolume->Settings.AutoExposureApplyPhysicalCameraExposure = 0;
-		ExposureVolume->Settings.bOverride_AutoExposureBias = true;
-		ExposureVolume->Settings.AutoExposureBias = 0.15f;
-		ExposureVolume->Settings.bOverride_ColorContrast = true;
-		ExposureVolume->Settings.ColorContrast = FVector4(0.84f, 0.84f, 0.84f, 1.0f);
-		ExposureVolume->Settings.bOverride_ColorOffset = true;
-		ExposureVolume->Settings.ColorOffset = FVector4(0.012f, 0.015f, 0.020f, 0.0f);
-	}
-
-	ADirectionalLight* MoonLight = GetWorld()->SpawnActor<ADirectionalLight>(FVector::ZeroVector, FRotator(-52.0f, -38.0f, 0.0f));
-	if (MoonLight)
-	{
-		MoonLight->SetMobility(EComponentMobility::Movable);
-		MoonLight->GetLightComponent()->SetIntensity(4.5f);
-		MoonLight->GetLightComponent()->SetLightColor(
-			FLinearColor::FromSRGBColor(FColor(156, 169, 194)));
-		if (UDirectionalLightComponent* MoonComponent =
-			Cast<UDirectionalLightComponent>(MoonLight->GetLightComponent()))
-		{
-			MoonComponent->SetLightSourceAngle(6.0f);
-		}
-	}
-
-	APointLight* AmbientFill = GetWorld()->SpawnActor<APointLight>(FVector(0.0f, 0.0f, 900.0f), FRotator::ZeroRotator);
-	if (AmbientFill)
-	{
-		AmbientFill->SetMobility(EComponentMobility::Movable);
-		AmbientFill->GetLightComponent()->SetIntensity(9000.0f);
-		AmbientFill->GetLightComponent()->SetLightColor(
-			FLinearColor::FromSRGBColor(FColor(124, 133, 148)));
-		if (UPointLightComponent* FillComponent = Cast<UPointLightComponent>(AmbientFill->GetLightComponent()))
-		{
-			FillComponent->SetAttenuationRadius(6500.0f);
-			FillComponent->SetSourceRadius(600.0f);
-			FillComponent->SetCastShadows(false);
-		}
-	}
+	// The visual baseline is installed by each local HUD. GameMode only exists on
+	// authority, so owning presentation here would make remote clients diverge.
 }

@@ -1,6 +1,7 @@
 #include "Gameplay/EmberdeepCombatFeedback.h"
 
 #include "Components/PointLightComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -8,6 +9,7 @@
 #include "Engine/StaticMesh.h"
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 
 AEmberdeepCombatFeedback::AEmberdeepCombatFeedback()
@@ -21,13 +23,39 @@ AEmberdeepCombatFeedback::AEmberdeepCombatFeedback()
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> ProjectVoxelMaterial(
+		TEXT("/Game/Emberdeep/Materials/M_VoxelSurface.M_VoxelSurface"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> FallbackVoxelMaterial(
+		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	UMaterialInterface* VoxelMaterial = ProjectVoxelMaterial.Succeeded()
+		? ProjectVoxelMaterial.Object
+		: FallbackVoxelMaterial.Object;
 
 	Shockwave = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Shockwave"));
 	Shockwave->SetupAttachment(SceneRoot);
 	Shockwave->SetStaticMesh(CylinderMesh.Object);
+	Shockwave->SetMaterial(0, VoxelMaterial);
 	Shockwave->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Shockwave->SetCastShadow(false);
 	Shockwave->SetHiddenInGame(true);
+
+	ArcSegments = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("ArcSegments"));
+	ArcSegments->SetupAttachment(SceneRoot);
+	ArcSegments->SetStaticMesh(CubeMesh.Object);
+	ArcSegments->SetMaterial(0, VoxelMaterial);
+	ArcSegments->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ArcSegments->SetGenerateOverlapEvents(false);
+	ArcSegments->SetCastShadow(false);
+	ArcSegments->SetHiddenInGame(true);
+
+	ImpactRing = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("ImpactRing"));
+	ImpactRing->SetupAttachment(SceneRoot);
+	ImpactRing->SetStaticMesh(CubeMesh.Object);
+	ImpactRing->SetMaterial(0, VoxelMaterial);
+	ImpactRing->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ImpactRing->SetGenerateOverlapEvents(false);
+	ImpactRing->SetCastShadow(false);
+	ImpactRing->SetHiddenInGame(true);
 
 	DamageText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("DamageText"));
 	DamageText->SetupAttachment(SceneRoot);
@@ -51,6 +79,7 @@ AEmberdeepCombatFeedback::AEmberdeepCombatFeedback()
 			*FString::Printf(TEXT("ImpactShard_%02d"), Index));
 		Shard->SetupAttachment(SceneRoot);
 		Shard->SetStaticMesh(CubeMesh.Object);
+		Shard->SetMaterial(0, VoxelMaterial);
 		Shard->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Shard->SetCastShadow(false);
 		Shard->SetHiddenInGame(true);
@@ -124,6 +153,9 @@ void AEmberdeepCombatFeedback::SetComponentColor(UStaticMeshComponent* Component
 		if (UMaterialInstanceDynamic* Material = Component->CreateDynamicMaterialInstance(0))
 		{
 			Material->SetVectorParameterValue(TEXT("Color"), Color);
+			Material->SetScalarParameterValue(TEXT("Roughness"), 0.72f);
+			Material->SetScalarParameterValue(TEXT("Specular"), 0.12f);
+			Material->SetScalarParameterValue(TEXT("EmissiveStrength"), 4.0f);
 		}
 	}
 }
@@ -138,15 +170,32 @@ void AEmberdeepCombatFeedback::ConfigureSwing(const FVector& Direction, bool bHe
 			? FLinearColor(1.0f, 0.78f, 0.30f)
 			: FLinearColor(0.52f, 0.66f, 0.82f);
 
-	Shockwave->SetHiddenInGame(false);
-	Shockwave->SetRelativeLocation(FVector(0.0f, 0.0f, -58.0f));
-	InitialShockwaveScale = bHeavyAttack ? FVector(0.55f, 0.55f, 0.018f) : FVector(0.30f, 0.30f, 0.012f);
-	FinalShockwaveScale = bHeavyAttack ? FVector(2.25f, 2.25f, 0.010f) : FVector(1.25f, 1.25f, 0.006f);
-	Shockwave->SetRelativeScale3D(InitialShockwaveScale);
-	SetComponentColor(Shockwave, Color);
-
 	const FVector SafeDirection = Direction.GetSafeNormal2D();
 	const FVector Side(-SafeDirection.Y, SafeDirection.X, 0.0f);
+	ArcSegments->ClearInstances();
+	ArcSegments->SetHiddenInGame(false);
+	ArcSegments->SetRelativeLocation(FVector(0.0f, 0.0f, -12.0f));
+	ArcSegments->SetRelativeScale3D(FVector::OneVector);
+	SetComponentColor(ArcSegments, Color);
+	const int32 ArcCount = bHeavyAttack ? 19 : 15;
+	const float ArcRadius = bHeavyAttack ? 148.0f : 116.0f;
+	const float ArcHalfAngle = bHeavyAttack ? 73.0f : 61.0f;
+	for (int32 SegmentIndex = 0; SegmentIndex < ArcCount; ++SegmentIndex)
+	{
+		const float SegmentAlpha = ArcCount > 1
+			? static_cast<float>(SegmentIndex) / static_cast<float>(ArcCount - 1)
+			: 0.5f;
+		const float AngleRadians = FMath::DegreesToRadians(FMath::Lerp(-ArcHalfAngle, ArcHalfAngle, SegmentAlpha));
+		const FVector Radial = SafeDirection * FMath::Cos(AngleRadians) + Side * FMath::Sin(AngleRadians);
+		const FVector SegmentLocation = Radial * ArcRadius;
+		const float TangentYaw = Radial.Rotation().Yaw + 90.0f;
+		const float EdgeFade = 0.45f + FMath::Sin(SegmentAlpha * UE_PI) * 0.55f;
+		ArcSegments->AddInstance(FTransform(
+			FRotator(0.0f, TangentYaw, 0.0f),
+			SegmentLocation,
+			FVector((bHeavyAttack ? 0.34f : 0.27f) * EdgeFade, 0.075f * EdgeFade, 0.045f)));
+	}
+
 	ShardVelocities.SetNum(Shards.Num());
 	ShardSpin.SetNum(Shards.Num());
 	for (int32 Index = 0; Index < Shards.Num(); ++Index)
@@ -187,12 +236,23 @@ void AEmberdeepCombatFeedback::ConfigureHit(
 		: FString::Printf(TEXT("%d"), FMath::RoundToInt(Damage))));
 	DamageText->SetTextRenderColor(Color.ToFColorSRGB());
 
-	Shockwave->SetHiddenInGame(false);
-	Shockwave->SetRelativeLocation(FVector(0.0f, 0.0f, -55.0f));
-	InitialShockwaveScale = FVector(0.24f, 0.24f, 0.012f);
-	FinalShockwaveScale = bFatal ? FVector(2.8f, 2.8f, 0.006f) : FVector(1.35f, 1.35f, 0.005f);
-	Shockwave->SetRelativeScale3D(InitialShockwaveScale);
-	SetComponentColor(Shockwave, Color);
+	ImpactRing->ClearInstances();
+	ImpactRing->SetHiddenInGame(false);
+	ImpactRing->SetRelativeLocation(FVector(0.0f, 0.0f, -78.0f));
+	InitialRingScale = FVector(bFatal ? 0.85f : 0.68f);
+	FinalRingScale = FVector(bFatal ? 3.25f : 1.85f);
+	ImpactRing->SetRelativeScale3D(InitialRingScale);
+	SetComponentColor(ImpactRing, Color);
+	const int32 RingCount = bFatal ? 18 : 14;
+	for (int32 SegmentIndex = 0; SegmentIndex < RingCount; ++SegmentIndex)
+	{
+		const float Angle = 360.0f * static_cast<float>(SegmentIndex) / static_cast<float>(RingCount);
+		const FVector Radial = FRotator(0.0f, Angle, 0.0f).Vector();
+		ImpactRing->AddInstance(FTransform(
+			FRotator(0.0f, Angle + 90.0f, 0.0f),
+			Radial * 34.0f,
+			FVector(bFatal ? 0.22f : 0.16f, 0.045f, 0.025f)));
+	}
 
 	const FVector SafeDirection = Direction.IsNearlyZero() ? FVector::ForwardVector : Direction.GetSafeNormal2D();
 	const FVector Side(-SafeDirection.Y, SafeDirection.X, 0.0f);
@@ -226,12 +286,22 @@ void AEmberdeepCombatFeedback::ConfigureDodge(const FVector& Direction)
 	Lifetime = 0.34f;
 	TextRiseSpeed = 0.0f;
 	const FLinearColor Color(0.18f, 0.48f, 0.88f);
-	Shockwave->SetHiddenInGame(false);
-	Shockwave->SetRelativeLocation(FVector(0.0f, 0.0f, -58.0f));
-	InitialShockwaveScale = FVector(0.42f, 0.42f, 0.010f);
-	FinalShockwaveScale = FVector(1.55f, 1.55f, 0.004f);
-	Shockwave->SetRelativeScale3D(InitialShockwaveScale);
-	SetComponentColor(Shockwave, Color);
+	ImpactRing->ClearInstances();
+	ImpactRing->SetHiddenInGame(false);
+	ImpactRing->SetRelativeLocation(FVector(0.0f, 0.0f, -78.0f));
+	InitialRingScale = FVector(0.75f);
+	FinalRingScale = FVector(1.85f);
+	ImpactRing->SetRelativeScale3D(InitialRingScale);
+	SetComponentColor(ImpactRing, Color);
+	for (int32 SegmentIndex = 0; SegmentIndex < 12; ++SegmentIndex)
+	{
+		const float Angle = 360.0f * static_cast<float>(SegmentIndex) / 12.0f;
+		const FVector Radial = FRotator(0.0f, Angle, 0.0f).Vector();
+		ImpactRing->AddInstance(FTransform(
+			FRotator(0.0f, Angle + 90.0f, 0.0f),
+			Radial * 29.0f,
+			FVector(0.14f, 0.04f, 0.02f)));
+	}
 
 	const FVector SafeDirection = Direction.GetSafeNormal2D();
 	const FVector Backward = -SafeDirection;
@@ -260,7 +330,25 @@ void AEmberdeepCombatFeedback::Tick(float DeltaSeconds)
 	const float Alpha = FMath::Clamp(Age / FMath::Max(Lifetime, KINDA_SMALL_NUMBER), 0.0f, 1.0f);
 	const float Remaining = 1.0f - Alpha;
 
-	Shockwave->SetRelativeScale3D(FMath::Lerp(InitialShockwaveScale, FinalShockwaveScale, FMath::InterpEaseOut(0.0f, 1.0f, Alpha, 2.2f)));
+	if (!Shockwave->bHiddenInGame)
+	{
+		Shockwave->SetRelativeScale3D(FMath::Lerp(
+			InitialShockwaveScale,
+			FinalShockwaveScale,
+			FMath::InterpEaseOut(0.0f, 1.0f, Alpha, 2.2f)));
+	}
+	if (!ArcSegments->bHiddenInGame)
+	{
+		const float ArcExpansion = FMath::InterpEaseOut(1.0f, 1.12f, Alpha, 2.5f);
+		ArcSegments->SetRelativeScale3D(FVector(ArcExpansion));
+	}
+	if (!ImpactRing->bHiddenInGame)
+	{
+		ImpactRing->SetRelativeScale3D(FMath::Lerp(
+			InitialRingScale,
+			FinalRingScale,
+			FMath::InterpEaseOut(0.0f, 1.0f, Alpha, 2.4f)));
+	}
 	FlashLight->SetIntensity(InitialLightIntensity * Remaining * Remaining);
 
 	if (!DamageText->bHiddenInGame)

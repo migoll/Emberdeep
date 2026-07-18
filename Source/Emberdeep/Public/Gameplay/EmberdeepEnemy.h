@@ -7,6 +7,7 @@
 class UEmberdeepHealthComponent;
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
+class USceneComponent;
 class UStaticMeshComponent;
 
 UCLASS()
@@ -37,6 +38,8 @@ private:
 	void ResetHitFlash();
 	void ApplyBoneColor(const FLinearColor& Color);
 	void ApplyEnemyStyle();
+	void UpdateVisualPresentation(float DeltaSeconds);
+	void ApplySteppedVisualPose(bool bForce = false);
 
 	UFUNCTION()
 	void OnRep_EnemyStyle();
@@ -53,11 +56,35 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UStaticMeshComponent> AttackTelegraph;
 
+	UPROPERTY(VisibleAnywhere, Category = "Visual")
+	TObjectPtr<USceneComponent> EnemyVisualRoot;
+
+	UPROPERTY(VisibleAnywhere, Category = "Visual")
+	TObjectPtr<USceneComponent> WeaponRoot;
+
 	UPROPERTY()
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> BoneVoxelMeshes;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> BoneMaterials;
+
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> WeaponSteelVoxels;
+
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> WeaponGripVoxels;
+
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> AccentVoxels;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WeaponSteelMaterial;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WeaponGripMaterial;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> AccentMaterial;
 
 	UPROPERTY(EditDefaultsOnly, Category = "AI")
 	float AggroRange = 520.0f;
@@ -76,7 +103,18 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_EnemyStyle)
 	bool bIsElite = false;
 	bool bAttackWindingUp = false;
+	bool bVisualDead = false;
 	int32 GoldDropValue = 7;
 	int32 RunTier = 1;
+	int32 LastVisualPoseStep = INDEX_NONE;
+	float VisualWindupStartTime = -100.0f;
+	float VisualAttackRecoveryStartTime = -100.0f;
+	float VisualHitStartTime = -100.0f;
+	float VisualDeathStartTime = -100.0f;
+	float VisualFacingYaw = 0.0f;
+	FVector VisualRestingLocation = FVector::ZeroVector;
+	FRotator VisualRestingRotation = FRotator::ZeroRotator;
+	FVector WeaponRestingLocation = FVector::ZeroVector;
+	FRotator WeaponRestingRotation = FRotator::ZeroRotator;
 	TWeakObjectPtr<ACharacter> PendingAttackTarget;
 };

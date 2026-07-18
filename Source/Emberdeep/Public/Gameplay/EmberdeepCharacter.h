@@ -69,6 +69,8 @@ private:
 	void PlayHurtVisual(float Damage, bool bFatal);
 	void StartLocalCameraShake(float Strength, float Duration);
 	void UpdateLocalCameraShake(float DeltaSeconds);
+	void UpdateVisualPresentation(float DeltaSeconds);
+	void ApplySteppedVisualPose(bool bForce = false);
 	void ResetHitVisual();
 	void ExecuteDodge(const FVector& DodgeDirection);
 	void ResetAttackVisual();
@@ -101,6 +103,12 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Camera")
 	TObjectPtr<UCameraComponent> IsometricCamera;
+
+	UPROPERTY(VisibleAnywhere, Category = "Visual")
+	TObjectPtr<USceneComponent> ThorgrimVisualRoot;
+
+	UPROPERTY(VisibleAnywhere, Category = "Visual")
+	TObjectPtr<USceneComponent> ThorgrimBodyRoot;
 
 	UPROPERTY(VisibleAnywhere, Category = "Visual")
 	TObjectPtr<USceneComponent> ThorgrimAxeRoot;
@@ -155,7 +163,24 @@ private:
 	bool bInvulnerable = false;
 	int32 AttackVisualSequence = 0;
 	int32 BasicComboStep = 0;
+	int32 LastVisualPoseStep = INDEX_NONE;
+	float VisualAttackStartTime = -100.0f;
+	float VisualAttackDuration = 0.0f;
+	float VisualDodgeStartTime = -100.0f;
+	float VisualHurtStartTime = -100.0f;
+	float VisualDeathStartTime = -100.0f;
+	float VisualFacingYaw = 0.0f;
+	bool bVisualHeavyAttack = false;
+	bool bVisualDead = false;
+	int32 VisualComboStep = 0;
+	FVector VisualDodgeDirection = FVector::ForwardVector;
+	FVector ThorgrimVisualRestingLocation = FVector::ZeroVector;
+	FRotator ThorgrimVisualRestingRotation = FRotator::ZeroRotator;
+	FVector ThorgrimBodyRestingLocation = FVector::ZeroVector;
 	FRotator ThorgrimAxeRestingRotation;
+	FVector ThorgrimAxeRestingLocation = FVector::ZeroVector;
+	FRotator ThorgrimShieldRestingRotation = FRotator::ZeroRotator;
+	FVector ThorgrimShieldRestingLocation = FVector::ZeroVector;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };
