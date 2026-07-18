@@ -40,6 +40,21 @@ PALETTE = {
     "Cloth": "#243442",
 }
 
+# Material-specific value bands used both as the runtime art target and in the
+# deterministic preview. They add readable wear, grain, patina, and fur clumps
+# without applying a bitmap texture across the voxel geometry.
+MATERIAL_SHADES = {
+    "Night": ("#121922", "#18202B", "#1F2A36"),
+    "Steel": ("#44494F", "#555A60", "#70777E"),
+    "Ash": ("#605D59", "#777572", "#8F8B84"),
+    "Bone": ("#AE9C7C", "#D2C2A2", "#E4D5B6"),
+    "Hide": ("#69462D", "#8A5F3C", "#A07045"),
+    "Fur": ("#362720", "#49372D", "#5E4432"),
+    "Skin": ("#9B5A42", "#B87454", "#CC8966"),
+    "Wood": ("#3C271D", "#4E3525", "#60412A"),
+    "Cloth": ("#1C2833", "#243442", "#2E414E"),
+}
+
 PART_PIVOTS = {
     "Body": (0.0, 0.0, 0.0),
     "Axe": (12.0, 66.0, 51.0),
@@ -509,6 +524,63 @@ def shade(hex_color: str, factor: float) -> tuple[int, int, int]:
     return tuple(max(0, min(255, round(value * factor))) for value in values)
 
 
+def positive_modulo(value: int, divisor: int) -> int:
+    return value % divisor
+
+
+def hash_thorgrim_cell(x: int, y: int, z: int, seed: int) -> int:
+    value = 2166136261
+    for component in (x, y, z, seed):
+        value = ((value ^ (component & 0xFFFFFFFF)) * 16777619) & 0xFFFFFFFF
+    return value
+
+
+def runtime_voxel_coordinates(voxel: VoxelCell) -> tuple[int, int, int]:
+    pivot = RUNTIME_PART_PIVOTS[voxel.part]
+    pivot_cells = tuple(round(value / VOXEL_UNIT_CM) for value in pivot)
+    return (
+        voxel.x - pivot_cells[0],
+        voxel.y - pivot_cells[1],
+        voxel.z - pivot_cells[2],
+    )
+
+
+def material_shade_index(voxel: VoxelCell) -> int:
+    x, y, z = runtime_voxel_coordinates(voxel)
+    palette_seed = list(PALETTE).index(voxel.palette) + list(PART_PIVOTS).index(voxel.part) * 17
+    cluster_x, cluster_y, cluster_z = x // 2, y // 2, z // 2
+    cell_hash = hash_thorgrim_cell(x, y, z, palette_seed)
+    cluster_hash = hash_thorgrim_cell(cluster_x, cluster_y, cluster_z, palette_seed)
+
+    if voxel.palette == "Fur":
+        if cluster_hash % 11 < 4:
+            return 0
+        return 2 if cluster_hash % 13 == 12 or positive_modulo(y + z, 11) == 0 else 1
+    if voxel.palette == "Hide":
+        if positive_modulo(x + z * 2, 13) == 0:
+            return 2
+        return 0 if cluster_hash % 9 < 2 else 1
+    if voxel.palette == "Wood":
+        grain = positive_modulo(y + z * 2, 9)
+        return 2 if grain == 0 else (0 if grain <= 2 else 1)
+    if voxel.palette in {"Steel", "Ash"}:
+        if positive_modulo(x + y * 2 + z * 3, 17) == 0:
+            return 2
+        return 0 if cell_hash % 12 < 2 else 1
+    if voxel.palette == "Bone":
+        if positive_modulo(x - y + z * 2, 19) == 0:
+            return 2
+        return 0 if cluster_hash % 10 < 2 else 1
+    if voxel.palette in {"Night", "Cloth"}:
+        if positive_modulo(x + y + z, 15) == 0:
+            return 2
+        return 0 if cluster_hash % 13 < 2 else 1
+    if voxel.palette == "Skin":
+        selector = cell_hash % 16
+        return 0 if selector == 0 else (2 if selector == 15 else 1)
+    return 1
+
+
 def render_preview(voxels: list[VoxelCell]) -> None:
     logical_size = 560
     image = Image.new("RGB", (logical_size, logical_size), "#090C10")
@@ -528,7 +600,7 @@ def render_preview(voxels: list[VoxelCell]) -> None:
 
     faces_to_draw: list[tuple[float, list[tuple[float, float]], tuple[int, int, int]]] = []
     projected_points: list[tuple[float, float]] = []
-    raw_faces: list[tuple[float, np.ndarray, str, float]] = []
+    raw_faces: list[tuple[float, np.ndarray, VoxelCell, float]] = []
     for voxel in voxels:
         vertices = voxel_vertices(voxel)
         for face in FACES:
@@ -546,7 +618,7 @@ def render_preview(voxels: list[VoxelCell]) -> None:
             depth = float(np.dot(face_center - camera, forward))
             brightness = 0.62 + 0.38 * max(0.0, float(np.dot(normal, light)))
             points = np.column_stack(((face_vertices - target) @ right, (face_vertices - target) @ camera_up))
-            raw_faces.append((depth, points, voxel.palette, brightness))
+            raw_faces.append((depth, points, voxel, brightness))
             projected_points.extend((float(point[0]), float(point[1])) for point in points)
 
     xs = [point[0] for point in projected_points]
@@ -554,12 +626,13 @@ def render_preview(voxels: list[VoxelCell]) -> None:
     scale = min(390 / (max(xs) - min(xs)), 400 / (max(ys) - min(ys)))
     center_x = (min(xs) + max(xs)) / 2
     center_y = (min(ys) + max(ys)) / 2
-    for depth, points, palette, brightness in raw_faces:
+    for depth, points, voxel, brightness in raw_faces:
         screen_points = [
             (280 + (float(point[0]) - center_x) * scale, 270 - (float(point[1]) - center_y) * scale)
             for point in points
         ]
-        faces_to_draw.append((depth, screen_points, shade(PALETTE[palette], brightness)))
+        material_color = MATERIAL_SHADES[voxel.palette][material_shade_index(voxel)]
+        faces_to_draw.append((depth, screen_points, shade(material_color, brightness)))
 
     for _, points, color in sorted(faces_to_draw, key=lambda item: item[0], reverse=True):
         draw.polygon(points, fill=color, outline="#111419")

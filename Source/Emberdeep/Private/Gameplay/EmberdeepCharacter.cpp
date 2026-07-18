@@ -15,6 +15,7 @@
 #include "Gameplay/EmberdeepGameMode.h"
 #include "Gameplay/EmberdeepPlayerState.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
@@ -52,7 +53,7 @@ namespace
 	{
 		EThorgrimPalette Palette;
 		const TCHAR* Name;
-		FLinearColor Color;
+		FLinearColor Shades[EmberdeepVoxelStyle::ShadeCount];
 	};
 
 	struct FThorgrimVoxelCell
@@ -73,16 +74,104 @@ namespace
 
 	const FThorgrimPaletteDefinition GThorgrimPaletteDefinitions[] =
 	{
-		{ EThorgrimPalette::Night, TEXT("Night"), FLinearColor::FromSRGBColor(FColor(24, 32, 43)) },
-		{ EThorgrimPalette::Steel, TEXT("Steel"), FLinearColor::FromSRGBColor(FColor(85, 90, 96)) },
-		{ EThorgrimPalette::Ash, TEXT("Ash"), FLinearColor::FromSRGBColor(FColor(119, 117, 114)) },
-		{ EThorgrimPalette::Bone, TEXT("Bone"), FLinearColor::FromSRGBColor(FColor(210, 194, 162)) },
-		{ EThorgrimPalette::Hide, TEXT("Hide"), FLinearColor::FromSRGBColor(FColor(138, 95, 60)) },
-		{ EThorgrimPalette::Fur, TEXT("Fur"), FLinearColor::FromSRGBColor(FColor(73, 55, 45)) },
-		{ EThorgrimPalette::Skin, TEXT("Skin"), FLinearColor::FromSRGBColor(FColor(184, 116, 84)) },
-		{ EThorgrimPalette::Wood, TEXT("Wood"), FLinearColor::FromSRGBColor(FColor(78, 53, 37)) },
-		{ EThorgrimPalette::Cloth, TEXT("Cloth"), FLinearColor::FromSRGBColor(FColor(36, 52, 66)) }
+		{ EThorgrimPalette::Night, TEXT("Night"), {
+			FLinearColor::FromSRGBColor(FColor(18, 25, 34)), FLinearColor::FromSRGBColor(FColor(24, 32, 43)), FLinearColor::FromSRGBColor(FColor(31, 42, 54)) } },
+		{ EThorgrimPalette::Steel, TEXT("Steel"), {
+			FLinearColor::FromSRGBColor(FColor(68, 73, 79)), FLinearColor::FromSRGBColor(FColor(85, 90, 96)), FLinearColor::FromSRGBColor(FColor(112, 119, 126)) } },
+		{ EThorgrimPalette::Ash, TEXT("Ash"), {
+			FLinearColor::FromSRGBColor(FColor(96, 93, 89)), FLinearColor::FromSRGBColor(FColor(119, 117, 114)), FLinearColor::FromSRGBColor(FColor(143, 139, 132)) } },
+		{ EThorgrimPalette::Bone, TEXT("Bone"), {
+			FLinearColor::FromSRGBColor(FColor(174, 156, 124)), FLinearColor::FromSRGBColor(FColor(210, 194, 162)), FLinearColor::FromSRGBColor(FColor(228, 213, 182)) } },
+		{ EThorgrimPalette::Hide, TEXT("Hide"), {
+			FLinearColor::FromSRGBColor(FColor(105, 70, 45)), FLinearColor::FromSRGBColor(FColor(138, 95, 60)), FLinearColor::FromSRGBColor(FColor(160, 112, 69)) } },
+		{ EThorgrimPalette::Fur, TEXT("Fur"), {
+			FLinearColor::FromSRGBColor(FColor(54, 39, 32)), FLinearColor::FromSRGBColor(FColor(73, 55, 45)), FLinearColor::FromSRGBColor(FColor(94, 68, 50)) } },
+		{ EThorgrimPalette::Skin, TEXT("Skin"), {
+			FLinearColor::FromSRGBColor(FColor(155, 90, 66)), FLinearColor::FromSRGBColor(FColor(184, 116, 84)), FLinearColor::FromSRGBColor(FColor(204, 137, 102)) } },
+		{ EThorgrimPalette::Wood, TEXT("Wood"), {
+			FLinearColor::FromSRGBColor(FColor(60, 39, 29)), FLinearColor::FromSRGBColor(FColor(78, 53, 37)), FLinearColor::FromSRGBColor(FColor(96, 65, 42)) } },
+		{ EThorgrimPalette::Cloth, TEXT("Cloth"), {
+			FLinearColor::FromSRGBColor(FColor(28, 40, 51)), FLinearColor::FromSRGBColor(FColor(36, 52, 66)), FLinearColor::FromSRGBColor(FColor(46, 65, 78)) } }
 	};
+
+	int32 PositiveModulo(int32 Value, int32 Divisor)
+	{
+		const int32 Result = Value % Divisor;
+		return Result < 0 ? Result + Divisor : Result;
+	}
+
+	uint32 HashThorgrimCell(int32 X, int32 Y, int32 Z, int32 Seed)
+	{
+		uint32 Hash = 2166136261u;
+		Hash = (Hash ^ static_cast<uint32>(X)) * 16777619u;
+		Hash = (Hash ^ static_cast<uint32>(Y)) * 16777619u;
+		Hash = (Hash ^ static_cast<uint32>(Z)) * 16777619u;
+		return (Hash ^ static_cast<uint32>(Seed)) * 16777619u;
+	}
+
+	int32 SelectThorgrimMaterialShade(const FThorgrimVoxelCell& Voxel)
+	{
+		const int32 PaletteSeed = static_cast<int32>(Voxel.Palette) + static_cast<int32>(Voxel.Part) * 17;
+		const int32 ClusterX = FMath::FloorToInt(static_cast<float>(Voxel.X) / 2.0f);
+		const int32 ClusterY = FMath::FloorToInt(static_cast<float>(Voxel.Y) / 2.0f);
+		const int32 ClusterZ = FMath::FloorToInt(static_cast<float>(Voxel.Z) / 2.0f);
+		const uint32 CellHash = HashThorgrimCell(Voxel.X, Voxel.Y, Voxel.Z, PaletteSeed);
+		const uint32 ClusterHash = HashThorgrimCell(ClusterX, ClusterY, ClusterZ, PaletteSeed);
+
+		switch (Voxel.Palette)
+		{
+		case EThorgrimPalette::Fur:
+			// Two-cell patches read as matted fur clumps instead of random noise.
+			if (ClusterHash % 11u < 4u)
+			{
+				return 0;
+			}
+			return ClusterHash % 13u == 12u || PositiveModulo(Voxel.Y + Voxel.Z, 11) == 0 ? 2 : 1;
+
+		case EThorgrimPalette::Hide:
+			if (PositiveModulo(Voxel.X + Voxel.Z * 2, 13) == 0)
+			{
+				return 2;
+			}
+			return ClusterHash % 9u < 2u ? 0 : 1;
+
+		case EThorgrimPalette::Wood:
+			if (PositiveModulo(Voxel.Y + Voxel.Z * 2, 9) == 0)
+			{
+				return 2;
+			}
+			return PositiveModulo(Voxel.Y + Voxel.Z * 2, 9) <= 2 ? 0 : 1;
+
+		case EThorgrimPalette::Steel:
+		case EThorgrimPalette::Ash:
+			if (PositiveModulo(Voxel.X + Voxel.Y * 2 + Voxel.Z * 3, 17) == 0)
+			{
+				return 2;
+			}
+			return CellHash % 12u < 2u ? 0 : 1;
+
+		case EThorgrimPalette::Bone:
+			if (PositiveModulo(Voxel.X - Voxel.Y + Voxel.Z * 2, 19) == 0)
+			{
+				return 2;
+			}
+			return ClusterHash % 10u < 2u ? 0 : 1;
+
+		case EThorgrimPalette::Night:
+		case EThorgrimPalette::Cloth:
+			if (PositiveModulo(Voxel.X + Voxel.Y + Voxel.Z, 15) == 0)
+			{
+				return 2;
+			}
+			return ClusterHash % 13u < 2u ? 0 : 1;
+
+		case EThorgrimPalette::Skin:
+			return CellHash % 16u == 0u ? 0 : (CellHash % 16u == 15u ? 2 : 1);
+
+		default:
+			return 1;
+		}
+	}
 
 	int32 GetThorgrimMeshKey(EThorgrimPart Part, EThorgrimPalette Palette, int32 ShadeIndex)
 	{
@@ -131,9 +220,11 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 	IsometricCamera->PostProcessSettings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
 	IsometricCamera->PostProcessSettings.AutoExposureApplyPhysicalCameraExposure = 0;
 	IsometricCamera->PostProcessSettings.bOverride_AutoExposureBias = true;
-	IsometricCamera->PostProcessSettings.AutoExposureBias = 0.5f;
+	IsometricCamera->PostProcessSettings.AutoExposureBias = 0.15f;
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> VoxelMaterial(
+		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 
 	ThorgrimAxeRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ThorgrimAxeRoot"));
 	ThorgrimAxeRoot->SetupAttachment(RootComponent);
@@ -178,6 +269,7 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 				PaletteMesh->SetGenerateOverlapEvents(false);
 				PaletteMesh->SetCanEverAffectNavigation(false);
 				PaletteMesh->SetStaticMesh(CubeMesh.Object);
+				PaletteMesh->SetMaterial(0, VoxelMaterial.Object);
 				ThorgrimPaletteMeshes.Add(PaletteMesh);
 				PaletteMeshes.Add(
 					GetThorgrimMeshKey(PartDefinition.Part, PaletteDefinition.Palette, ShadeIndex),
@@ -188,11 +280,7 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 
 	for (const FThorgrimVoxelCell& Voxel : GThorgrimVoxelCells)
 	{
-		const int32 ShadeIndex = EmberdeepVoxelStyle::SelectShade(
-			Voxel.X,
-			Voxel.Y,
-			Voxel.Z,
-			static_cast<int32>(Voxel.Palette));
+		const int32 ShadeIndex = SelectThorgrimMaterialShade(Voxel);
 		const int32 MeshKey = GetThorgrimMeshKey(Voxel.Part, Voxel.Palette, ShadeIndex);
 		VoxelTransformsByMesh[MeshKey].Add(FTransform(
 			FQuat::Identity,
@@ -240,6 +328,7 @@ void AEmberdeepCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	int32 ThorgrimInstanceCount = 0;
+	int32 ThorgrimMaterialCount = 0;
 	for (int32 MeshIndex = 0; MeshIndex < ThorgrimPaletteMeshes.Num(); ++MeshIndex)
 	{
 		UInstancedStaticMeshComponent* PaletteMesh = ThorgrimPaletteMeshes[MeshIndex];
@@ -253,13 +342,17 @@ void AEmberdeepCharacter::BeginPlay()
 			{
 				Material->SetVectorParameterValue(
 					TEXT("Color"),
-					EmberdeepVoxelStyle::ShadeColor(
-						GThorgrimPaletteDefinitions[PaletteIndex].Color,
-						ShadeIndex));
+					GThorgrimPaletteDefinitions[PaletteIndex].Shades[ShadeIndex]);
+				++ThorgrimMaterialCount;
 			}
 		}
 	}
-	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_VISUAL ThorgrimGenerated Instances=%d"), ThorgrimInstanceCount);
+	UE_LOG(
+		LogEmberdeep,
+		Display,
+		TEXT("EMBERDEEP_VISUAL ThorgrimGenerated Instances=%d Materials=%d"),
+		ThorgrimInstanceCount,
+		ThorgrimMaterialCount);
 
 	ThorgrimAxeRestingRotation = ThorgrimAxeRoot->GetRelativeRotation();
 	HealthComponent->OnDeath.AddUObject(this, &AEmberdeepCharacter::HandleDeath);

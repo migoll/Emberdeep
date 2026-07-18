@@ -41,7 +41,9 @@ namespace EmberdeepVoxelStyle
 
 	inline FLinearColor ShadeColor(const FLinearColor& BaseColor, int32 ShadeIndex)
 	{
-		const float Factor = ShadeIndex == 0 ? 0.72f : (ShadeIndex == 2 ? 1.16f : 1.0f);
+		// Narrow value bands keep the voxel surface readable without turning every
+		// four-centimetre cell into a separate high-contrast checker tile.
+		const float Factor = ShadeIndex == 0 ? 0.84f : (ShadeIndex == 2 ? 1.08f : 1.0f);
 		return FLinearColor(
 			FMath::Clamp(BaseColor.R * Factor, 0.0f, 1.0f),
 			FMath::Clamp(BaseColor.G * Factor, 0.0f, 1.0f),

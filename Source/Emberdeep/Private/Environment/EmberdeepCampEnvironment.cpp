@@ -159,36 +159,40 @@ AEmberdeepCampEnvironment::AEmberdeepCampEnvironment()
 	CampfireLight->SetupAttachment(CampRoot);
 	CampfireLight->SetRelativeLocation(GCampPrimaryFireLocation);
 	CampfireLight->SetMobility(EComponentMobility::Movable);
-	CampfireLight->SetIntensity(36000.0f);
-	CampfireLight->SetLightColor(FLinearColor(1.0f, 0.19f, 0.025f));
-	CampfireLight->SetAttenuationRadius(920.0f);
+	CampfireLight->SetIntensity(14000.0f);
+	CampfireLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 132, 66)));
+	CampfireLight->SetAttenuationRadius(980.0f);
+	CampfireLight->SetSourceRadius(55.0f);
 	CampfireLight->SetCastShadows(true);
 
 	WagonLanternLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("WagonLanternLight"));
 	WagonLanternLight->SetupAttachment(CampRoot);
 	WagonLanternLight->SetRelativeLocation(GCampWagonLanternLocation);
 	WagonLanternLight->SetMobility(EComponentMobility::Movable);
-	WagonLanternLight->SetIntensity(9500.0f);
-	WagonLanternLight->SetLightColor(FLinearColor(1.0f, 0.24f, 0.045f));
+	WagonLanternLight->SetIntensity(3500.0f);
+	WagonLanternLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 150, 82)));
 	WagonLanternLight->SetAttenuationRadius(520.0f);
+	WagonLanternLight->SetSourceRadius(24.0f);
 	WagonLanternLight->SetCastShadows(false);
 
 	ShelterLanternLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("ShelterLanternLight"));
 	ShelterLanternLight->SetupAttachment(CampRoot);
 	ShelterLanternLight->SetRelativeLocation(GCampShelterLanternLocation);
 	ShelterLanternLight->SetMobility(EComponentMobility::Movable);
-	ShelterLanternLight->SetIntensity(7500.0f);
-	ShelterLanternLight->SetLightColor(FLinearColor(1.0f, 0.20f, 0.035f));
+	ShelterLanternLight->SetIntensity(3000.0f);
+	ShelterLanternLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 145, 76)));
 	ShelterLanternLight->SetAttenuationRadius(460.0f);
+	ShelterLanternLight->SetSourceRadius(22.0f);
 	ShelterLanternLight->SetCastShadows(false);
 
 	WorkstationLanternLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("WorkstationLanternLight"));
 	WorkstationLanternLight->SetupAttachment(CampRoot);
 	WorkstationLanternLight->SetRelativeLocation(GCampWorkstationLanternLocation);
 	WorkstationLanternLight->SetMobility(EComponentMobility::Movable);
-	WorkstationLanternLight->SetIntensity(6500.0f);
-	WorkstationLanternLight->SetLightColor(FLinearColor(1.0f, 0.18f, 0.03f));
+	WorkstationLanternLight->SetIntensity(2800.0f);
+	WorkstationLanternLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 140, 72)));
 	WorkstationLanternLight->SetAttenuationRadius(420.0f);
+	WorkstationLanternLight->SetSourceRadius(20.0f);
 	WorkstationLanternLight->SetCastShadows(false);
 }
 
@@ -258,5 +262,5 @@ void AEmberdeepCampEnvironment::UpdateCampfireFlicker()
 	LastFlickerStep = FlickerStep;
 
 	static constexpr float FlickerPattern[] = { 0.94f, 1.03f, 0.98f, 1.08f, 0.96f, 1.01f, 0.91f, 1.05f };
-	CampfireLight->SetIntensity(36000.0f * FlickerPattern[FlickerStep % UE_ARRAY_COUNT(FlickerPattern)]);
+	CampfireLight->SetIntensity(14000.0f * FlickerPattern[FlickerStep % UE_ARRAY_COUNT(FlickerPattern)]);
 }

@@ -417,26 +417,38 @@ void AEmberdeepGameMode::SpawnWorldLighting()
 		ExposureVolume->Settings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
 		ExposureVolume->Settings.AutoExposureApplyPhysicalCameraExposure = 0;
 		ExposureVolume->Settings.bOverride_AutoExposureBias = true;
-		ExposureVolume->Settings.AutoExposureBias = 0.5f;
+		ExposureVolume->Settings.AutoExposureBias = 0.15f;
+		ExposureVolume->Settings.bOverride_ColorContrast = true;
+		ExposureVolume->Settings.ColorContrast = FVector4(0.84f, 0.84f, 0.84f, 1.0f);
+		ExposureVolume->Settings.bOverride_ColorOffset = true;
+		ExposureVolume->Settings.ColorOffset = FVector4(0.012f, 0.015f, 0.020f, 0.0f);
 	}
 
 	ADirectionalLight* MoonLight = GetWorld()->SpawnActor<ADirectionalLight>(FVector::ZeroVector, FRotator(-52.0f, -38.0f, 0.0f));
 	if (MoonLight)
 	{
 		MoonLight->SetMobility(EComponentMobility::Movable);
-		MoonLight->GetLightComponent()->SetIntensity(11.0f);
-		MoonLight->GetLightComponent()->SetLightColor(FLinearColor(0.48f, 0.56f, 0.72f));
+		MoonLight->GetLightComponent()->SetIntensity(4.5f);
+		MoonLight->GetLightComponent()->SetLightColor(
+			FLinearColor::FromSRGBColor(FColor(156, 169, 194)));
+		if (UDirectionalLightComponent* MoonComponent =
+			Cast<UDirectionalLightComponent>(MoonLight->GetLightComponent()))
+		{
+			MoonComponent->SetLightSourceAngle(6.0f);
+		}
 	}
 
 	APointLight* AmbientFill = GetWorld()->SpawnActor<APointLight>(FVector(0.0f, 0.0f, 900.0f), FRotator::ZeroRotator);
 	if (AmbientFill)
 	{
 		AmbientFill->SetMobility(EComponentMobility::Movable);
-		AmbientFill->GetLightComponent()->SetIntensity(18000.0f);
-		AmbientFill->GetLightComponent()->SetLightColor(FLinearColor(0.38f, 0.46f, 0.62f));
+		AmbientFill->GetLightComponent()->SetIntensity(9000.0f);
+		AmbientFill->GetLightComponent()->SetLightColor(
+			FLinearColor::FromSRGBColor(FColor(124, 133, 148)));
 		if (UPointLightComponent* FillComponent = Cast<UPointLightComponent>(AmbientFill->GetLightComponent()))
 		{
-			FillComponent->SetAttenuationRadius(5000.0f);
+			FillComponent->SetAttenuationRadius(6500.0f);
+			FillComponent->SetSourceRadius(600.0f);
 			FillComponent->SetCastShadows(false);
 		}
 	}
