@@ -216,6 +216,13 @@ float AEmberdeepEnemy::TakeDamage(
 
 	bHasAggro = true;
 	const float AppliedDamage = HealthComponent->ApplyDamage(DamageAmount);
+	if (HealthComponent->IsDead())
+	{
+		if (AEmberdeepCharacter* Killer = Cast<AEmberdeepCharacter>(DamageCauser))
+		{
+			Killer->AddExperience(bIsElite ? 50 : 20);
+		}
+	}
 
 	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
 	{

@@ -39,4 +39,7 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UTexture2D> ConnectedCombatHud;
+
+	UPROPERTY()
+	TObjectPtr<UTexture2D> FighterAbilityAtlas;
 };

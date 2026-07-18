@@ -21,12 +21,19 @@ public:
 	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
 	void AddGold(int32 Amount);
+	void AddExperience(int32 Amount);
 
 	UFUNCTION(BlueprintPure, Category = "Combat")
 	UEmberdeepHealthComponent* GetHealthComponent() const { return HealthComponent; }
 
 	UFUNCTION(BlueprintPure, Category = "Loot")
 	int32 GetGold() const { return Gold; }
+
+	UFUNCTION(BlueprintPure, Category = "Progression")
+	int32 GetCharacterLevel() const { return CharacterLevel; }
+
+	UFUNCTION(BlueprintPure, Category = "Progression")
+	float GetExperienceNormalized() const;
 
 	UFUNCTION(BlueprintPure, Category = "Combat")
 	float GetDodgeCooldownNormalized() const;
@@ -98,6 +105,15 @@ private:
 
 	UPROPERTY(Replicated)
 	int32 Gold = 0;
+
+	UPROPERTY(Replicated)
+	int32 CharacterLevel = 1;
+
+	UPROPERTY(Replicated)
+	int32 CurrentExperience = 0;
+
+	UPROPERTY(Replicated)
+	int32 ExperienceToNextLevel = 100;
 
 	UPROPERTY(ReplicatedUsing = OnRep_AimDirection)
 	FVector_NetQuantizeNormal ReplicatedAimDirection = FVector::ForwardVector;

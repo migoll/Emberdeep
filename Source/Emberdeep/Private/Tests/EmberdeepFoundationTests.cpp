@@ -35,6 +35,8 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("MulticastPlayAttackVisual")));
 
 	const AEmberdeepCharacter* CharacterDefault = AEmberdeepCharacter::StaticClass()->GetDefaultObject<AEmberdeepCharacter>();
+	TestEqual(TEXT("Characters begin at level one"), CharacterDefault->GetCharacterLevel(), 1);
+	TestEqual(TEXT("Characters begin with an empty XP bar"), CharacterDefault->GetExperienceNormalized(), 0.0f);
 	TArray<UInstancedStaticMeshComponent*> ThorgrimPaletteMeshes;
 	CharacterDefault->GetComponents<UInstancedStaticMeshComponent>(ThorgrimPaletteMeshes);
 	TestEqual(TEXT("Thorgrim must provide body, axe, and shield palette groups"), ThorgrimPaletteMeshes.Num(), 27);

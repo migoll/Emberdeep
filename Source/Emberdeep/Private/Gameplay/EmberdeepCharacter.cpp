@@ -500,6 +500,32 @@ void AEmberdeepCharacter::AddGold(int32 Amount)
 	}
 }
 
+void AEmberdeepCharacter::AddExperience(int32 Amount)
+{
+	if (!HasAuthority() || Amount <= 0)
+	{
+		return;
+	}
+
+	CurrentExperience += Amount;
+	while (CurrentExperience >= ExperienceToNextLevel)
+	{
+		CurrentExperience -= ExperienceToNextLevel;
+		++CharacterLevel;
+		ExperienceToNextLevel = FMath::RoundToInt(static_cast<float>(ExperienceToNextLevel) * 1.25f);
+	}
+
+	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_PROGRESSION Experience=%d/%d Level=%d"),
+		CurrentExperience, ExperienceToNextLevel, CharacterLevel);
+}
+
+float AEmberdeepCharacter::GetExperienceNormalized() const
+{
+	return ExperienceToNextLevel > 0
+		? FMath::Clamp(static_cast<float>(CurrentExperience) / static_cast<float>(ExperienceToNextLevel), 0.0f, 1.0f)
+		: 0.0f;
+}
+
 float AEmberdeepCharacter::GetDodgeCooldownNormalized() const
 {
 	if (!GetWorld() || DodgeCooldown <= 0.0f)
@@ -535,5 +561,8 @@ void AEmberdeepCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AEmberdeepCharacter, Gold);
+	DOREPLIFETIME(AEmberdeepCharacter, CharacterLevel);
+	DOREPLIFETIME(AEmberdeepCharacter, CurrentExperience);
+	DOREPLIFETIME(AEmberdeepCharacter, ExperienceToNextLevel);
 	DOREPLIFETIME(AEmberdeepCharacter, ReplicatedAimDirection);
 }

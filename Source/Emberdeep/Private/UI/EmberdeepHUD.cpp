@@ -21,6 +21,10 @@ AEmberdeepHUD::AEmberdeepHUD()
 	static ConstructorHelpers::FObjectFinder<UTexture2D> ConnectedHudTexture(
 		TEXT("/Game/Emberdeep/UI/T_ConnectedCombatHUD.T_ConnectedCombatHUD"));
 	ConnectedCombatHud = ConnectedHudTexture.Object;
+
+	static ConstructorHelpers::FObjectFinder<UTexture2D> AbilityAtlasTexture(
+		TEXT("/Game/Emberdeep/UI/T_FighterAbilityAtlas.T_FighterAbilityAtlas"));
+	FighterAbilityAtlas = AbilityAtlasTexture.Object;
 }
 
 void AEmberdeepHUD::DrawHUD()
@@ -177,8 +181,8 @@ void AEmberdeepHUD::DrawMinimapAndObjective()
 
 void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 {
-	constexpr float DesignWidth = 1744.0f;
-	constexpr float DesignHeight = 362.0f;
+	constexpr float DesignWidth = 2167.0f;
+	constexpr float DesignHeight = 503.0f;
 	// Stay compact in ordinary windows, grow through 1080p, then stop growing.
 	// At 1280 this is 640px; at 1920 it is 960px; at 1440p it caps at 980px.
 	const float TargetWidth = FMath::Clamp(Canvas->ClipX * 0.50f, 560.0f, 980.0f);
@@ -192,18 +196,18 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 		return FVector2D(HudX + X * Scale, HudY + Y * Scale);
 	};
 
-	// Live liquids and icons are authored in the frame's native 1744x362
+	// Live liquids and icons are authored in the frame's native 2167x503
 	// coordinate system. The single Scale value keeps every layer attached.
-	const FVector2D HealthCenter = DesignPoint(228.0f, 161.5f);
-	const FVector2D ResourceCenter = DesignPoint(1512.0f, 161.5f);
+	const FVector2D HealthCenter = DesignPoint(292.0f, 221.0f);
+	const FVector2D ResourceCenter = DesignPoint(1871.0f, 221.0f);
 
 	const FVector4 SlotBounds[] =
 	{
-		FVector4(417.0f, 123.0f, 161.0f, 153.0f),
-		FVector4(611.0f, 123.0f, 160.0f, 153.0f),
-		FVector4(802.0f, 123.0f, 156.0f, 153.0f),
-		FVector4(992.0f, 123.0f, 150.0f, 153.0f),
-		FVector4(1172.0f, 123.0f, 138.0f, 153.0f)
+		FVector4(643.0f, 286.0f, 121.0f, 115.0f),
+		FVector4(827.0f, 286.0f, 117.0f, 115.0f),
+		FVector4(1005.0f, 286.0f, 133.0f, 115.0f),
+		FVector4(1200.0f, 286.0f, 134.0f, 115.0f),
+		FVector4(1400.0f, 288.0f, 127.0f, 105.0f)
 	};
 	const FLinearColor SlotColors[] =
 	{
@@ -232,18 +236,59 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 	// The delivered aperture pixels are opaque black rather than transparent.
 	// Draw content afterward, strictly inside the measured openings, so the
 	// authored metalwork stays intact while live values remain visible.
-	DrawOrb(HealthCenter, 97.0f * Scale, Character->GetHealthComponent()->GetHealthNormalized(), FLinearColor(0.70f, 0.015f, 0.01f));
-	DrawOrb(ResourceCenter, 97.0f * Scale, Character->GetDodgeCooldownNormalized(), FLinearColor(0.025f, 0.24f, 0.78f));
+	DrawOrb(HealthCenter, 140.0f * Scale, Character->GetHealthComponent()->GetHealthNormalized(), FLinearColor(0.70f, 0.015f, 0.01f));
+	DrawOrb(ResourceCenter, 140.0f * Scale, Character->GetDodgeCooldownNormalized(), FLinearColor(0.025f, 0.24f, 0.78f));
+
+	// This recessed channel is permanently reserved for experience progress.
+	const float ExperienceTrackX = HudX + 514.0f * Scale;
+	const float ExperienceTrackY = HudY + 432.0f * Scale;
+	const float ExperienceTrackWidth = 1139.0f * Scale;
+	const float ExperienceTrackHeight = 24.0f * Scale;
+	DrawRect(FLinearColor(0.055f, 0.035f, 0.012f, 0.98f), ExperienceTrackX, ExperienceTrackY, ExperienceTrackWidth, ExperienceTrackHeight);
+	DrawRect(
+		FLinearColor(0.95f, 0.50f, 0.045f, 0.98f),
+		ExperienceTrackX,
+		ExperienceTrackY,
+		ExperienceTrackWidth * Character->GetExperienceNormalized(),
+		ExperienceTrackHeight);
 	for (int32 SlotIndex = 0; SlotIndex < UE_ARRAY_COUNT(SlotBounds); ++SlotIndex)
 	{
 		const FVector4& Slot = SlotBounds[SlotIndex];
-		const float Inset = 12.0f * Scale;
-		DrawRect(
-			SlotColors[SlotIndex],
-			HudX + Slot.X * Scale + Inset,
-			HudY + Slot.Y * Scale + Inset,
-			Slot.Z * Scale - Inset * 2.0f,
-			Slot.W * Scale - Inset * 2.0f);
+		const float Inset = 4.0f * Scale;
+		const float IconX = HudX + Slot.X * Scale + Inset;
+		const float IconY = HudY + Slot.Y * Scale + Inset;
+		const float IconWidth = Slot.Z * Scale - Inset * 2.0f;
+		const float IconHeight = Slot.W * Scale - Inset * 2.0f;
+		if (FighterAbilityAtlas)
+		{
+			DrawTexture(
+				FighterAbilityAtlas,
+				IconX,
+				IconY,
+				IconWidth,
+				IconHeight,
+				(35.0f + SlotIndex * 390.0f) / 1983.0f,
+				200.0f / 793.0f,
+				351.0f / 1983.0f,
+				378.0f / 793.0f,
+				FLinearColor::White,
+				BLEND_Translucent);
+		}
+		else
+		{
+			DrawRect(SlotColors[SlotIndex], IconX, IconY, IconWidth, IconHeight);
+		}
+
+		if (SlotIndex == 2)
+		{
+			const float CooldownRemaining = 1.0f - Character->GetDodgeCooldownNormalized();
+			DrawRect(
+				FLinearColor(0.0f, 0.0f, 0.0f, 0.72f),
+				IconX,
+				IconY,
+				IconWidth,
+				IconHeight * CooldownRemaining);
+		}
 	}
 
 	const TCHAR* AbilityKeys[] = {TEXT("LMB"), TEXT("RMB"), TEXT("SHIFT"), TEXT("Q"), TEXT("3")};
@@ -254,23 +299,30 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 			AbilityKeys[SlotIndex],
 			FLinearColor(0.96f, 0.80f, 0.47f),
 			HudX + (Slot.X + Slot.Z * 0.5f) * Scale,
-			HudY + 279.0f * Scale,
+			HudY + 402.0f * Scale,
 			GEngine->GetSmallFont(),
 			FMath::Clamp(Scale * 1.7f, 0.62f, 0.92f));
 	}
+	DrawCenteredText(
+		TEXT("0"),
+		FLinearColor::White,
+		HudX + (SlotBounds[4].X + SlotBounds[4].Z - 12.0f) * Scale,
+		HudY + 365.0f * Scale,
+		GEngine->GetSmallFont(),
+		FMath::Clamp(Scale * 1.8f, 0.65f, 0.95f));
 
 	DrawCenteredText(
 		FString::Printf(TEXT("%.0f / %.0f"), Character->GetHealthComponent()->GetCurrentHealth(), Character->GetHealthComponent()->GetMaxHealth()),
 		FLinearColor::White,
 		HealthCenter.X,
-		HudY + 292.0f * Scale,
+		HudY + 405.0f * Scale,
 		GEngine->GetSmallFont(),
 		FMath::Clamp(Scale * 1.55f, 0.62f, 0.86f));
 	DrawCenteredText(
-		FString::Printf(TEXT("GOLD  %d"), Character->GetGold()),
+		FString::Printf(TEXT("LEVEL %d     GOLD %d"), Character->GetCharacterLevel(), Character->GetGold()),
 		FLinearColor(1.0f, 0.66f, 0.16f),
 		Canvas->ClipX * 0.5f,
-		HudY + 326.0f * Scale,
+		HudY + 463.0f * Scale,
 		GEngine->GetSmallFont(),
 		FMath::Clamp(Scale * 1.55f, 0.62f, 0.86f));
 }
