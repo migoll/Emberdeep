@@ -18,6 +18,8 @@ public:
 
 private:
 	void DrawBar(float X, float Y, float Width, float Height, float NormalizedValue, const FLinearColor& FillColor);
+	void DrawPanel(float X, float Y, float Width, float Height);
+	void DrawCenteredText(const FString& Text, const FLinearColor& Color, float CenterX, float Y, UFont* Font, float Scale = 1.0f);
 	void DrawOrb(const FVector2D& Center, float Radius, float NormalizedValue, const FLinearColor& FillColor);
 	void DrawOrnamentSection(
 		float X,
