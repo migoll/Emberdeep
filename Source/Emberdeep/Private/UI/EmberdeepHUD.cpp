@@ -179,7 +179,9 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 {
 	constexpr float DesignWidth = 1744.0f;
 	constexpr float DesignHeight = 362.0f;
-	const float TargetWidth = FMath::Clamp(Canvas->ClipX * 0.72f, 620.0f, 980.0f);
+	// Stay compact in ordinary windows, grow through 1080p, then stop growing.
+	// At 1280 this is 640px; at 1920 it is 960px; at 1440p it caps at 980px.
+	const float TargetWidth = FMath::Clamp(Canvas->ClipX * 0.50f, 560.0f, 980.0f);
 	const float Scale = TargetWidth / DesignWidth;
 	const float HudWidth = DesignWidth * Scale;
 	const float HudHeight = DesignHeight * Scale;
