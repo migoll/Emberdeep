@@ -21,6 +21,18 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 	TestNotNull(TEXT("The skeleton enemy must exist"), AEmberdeepEnemy::StaticClass());
 	TestNotNull(TEXT("The gold pickup must exist"), AEmberdeepGoldPickup::StaticClass());
 	TestNotNull(TEXT("The combat HUD must exist"), AEmberdeepHUD::StaticClass());
+	TestNotNull(
+		TEXT("Attacks must enter through a server RPC"),
+		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("ServerPerformAttack")));
+	TestNotNull(
+		TEXT("Aim direction must be reported to the server"),
+		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("ServerSetAimDirection")));
+	TestNotNull(
+		TEXT("Dodge must enter through a server RPC"),
+		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("ServerDodge")));
+	TestNotNull(
+		TEXT("Attack presentation must multicast to the party"),
+		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("MulticastPlayAttackVisual")));
 
 	const AEmberdeepCharacter* CharacterDefault = AEmberdeepCharacter::StaticClass()->GetDefaultObject<AEmberdeepCharacter>();
 	TArray<UInstancedStaticMeshComponent*> ThorgrimPaletteMeshes;

@@ -45,11 +45,29 @@ private:
 	void BasicAttack();
 	void HeavyAttack();
 	void Dodge();
-	void PerformAttack(float Damage, float Radius, float Reach, float KnockbackStrength, float Cooldown);
+	void RequestAttack(bool bHeavyAttack);
+	void ExecuteAttack(bool bHeavyAttack, const FVector& AttackDirection);
+	void PlayAttackVisual(bool bHeavyAttack);
+	void ExecuteDodge(const FVector& DodgeDirection);
 	void ResetAttackVisual();
 	void EndDodge();
 	void HandleDeath();
 	void RestartEncounter();
+
+	UFUNCTION(Server, Unreliable)
+	void ServerSetAimDirection(FVector_NetQuantizeNormal NewAimDirection);
+
+	UFUNCTION(Server, Reliable)
+	void ServerPerformAttack(bool bHeavyAttack, FVector_NetQuantizeNormal RequestedAimDirection);
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayAttackVisual(bool bHeavyAttack);
+
+	UFUNCTION(Server, Reliable)
+	void ServerDodge(FVector_NetQuantizeNormal RequestedDodgeDirection);
+
+	UFUNCTION()
+	void OnRep_AimDirection();
 
 	UPROPERTY(VisibleAnywhere, Category = "Camera")
 	TObjectPtr<USpringArmComponent> CameraBoom;
@@ -81,8 +99,13 @@ private:
 	UPROPERTY(Replicated)
 	int32 Gold = 0;
 
+	UPROPERTY(ReplicatedUsing = OnRep_AimDirection)
+	FVector_NetQuantizeNormal ReplicatedAimDirection = FVector::ForwardVector;
+
 	float NextAttackTime = 0.0f;
 	float NextDodgeTime = 0.0f;
+	float NextAimReplicationTime = 0.0f;
+	FVector LastSentAimDirection = FVector::ForwardVector;
 	bool bInvulnerable = false;
 	FRotator ThorgrimAxeRestingRotation;
 

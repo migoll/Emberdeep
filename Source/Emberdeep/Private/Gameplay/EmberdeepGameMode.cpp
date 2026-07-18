@@ -12,6 +12,7 @@
 #include "Gameplay/EmberdeepCharacter.h"
 #include "Gameplay/EmberdeepEnemy.h"
 #include "Gameplay/EmberdeepPlayerController.h"
+#include "GameFramework/PlayerState.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UI/EmberdeepHUD.h"
 #include "UObject/ConstructorHelpers.h"
@@ -38,6 +39,49 @@ void AEmberdeepGameMode::StartPlay()
 		SpawnBlockoutArena();
 		SpawnCombatEncounter();
 	}
+}
+
+void AEmberdeepGameMode::PostLogin(APlayerController* NewPlayer)
+{
+	Super::PostLogin(NewPlayer);
+	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_NETWORK PlayerJoined Id=%d Players=%d"),
+		NewPlayer && NewPlayer->PlayerState ? NewPlayer->PlayerState->GetPlayerId() : INDEX_NONE,
+		GetNumPlayers());
+}
+
+void AEmberdeepGameMode::Logout(AController* Exiting)
+{
+	const int32 PlayerId = Exiting && Exiting->PlayerState ? Exiting->PlayerState->GetPlayerId() : INDEX_NONE;
+	Super::Logout(Exiting);
+	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_NETWORK PlayerLeft Id=%d Players=%d"), PlayerId, GetNumPlayers());
+}
+
+void AEmberdeepGameMode::RestartPlayer(AController* NewPlayer)
+{
+	Super::RestartPlayer(NewPlayer);
+	if (!NewPlayer || !NewPlayer->GetPawn())
+	{
+		return;
+	}
+
+	// Stable party slots prevent freshly connected players from spawning inside
+	// each other while the blockout map still has only one engine PlayerStart.
+	static const FVector PartySpawnLocations[] =
+	{
+		FVector(-180.0f, -120.0f, 75.0f),
+		FVector(180.0f, -120.0f, 75.0f),
+		FVector(-180.0f, 120.0f, 75.0f),
+		FVector(180.0f, 120.0f, 75.0f),
+		FVector(0.0f, 0.0f, 75.0f)
+	};
+	const int32 PlayerId = NewPlayer->PlayerState ? NewPlayer->PlayerState->GetPlayerId() : 0;
+	const int32 SpawnIndex = FMath::Abs(PlayerId) % UE_ARRAY_COUNT(PartySpawnLocations);
+	NewPlayer->GetPawn()->SetActorLocation(
+		PartySpawnLocations[SpawnIndex],
+		false,
+		nullptr,
+		ETeleportType::TeleportPhysics);
+	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_NETWORK PlayerSpawned Id=%d Slot=%d"), PlayerId, SpawnIndex);
 }
 
 void AEmberdeepGameMode::SpawnCombatEncounter()

@@ -15,6 +15,9 @@ class EMBERDEEP_API AEmberdeepGameMode : public AGameModeBase
 public:
 	AEmberdeepGameMode();
 	virtual void StartPlay() override;
+	virtual void PostLogin(APlayerController* NewPlayer) override;
+	virtual void Logout(AController* Exiting) override;
+	virtual void RestartPlayer(AController* NewPlayer) override;
 	void NotifyEnemyDefeated();
 
 	UFUNCTION(BlueprintPure, Category = "Encounter")

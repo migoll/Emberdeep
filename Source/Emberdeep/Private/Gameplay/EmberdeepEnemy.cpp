@@ -3,6 +3,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/DamageEvents.h"
+#include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Gameplay/EmberdeepCharacter.h"
 #include "Gameplay/EmberdeepGameMode.h"
@@ -112,8 +113,25 @@ void AEmberdeepEnemy::Tick(float DeltaSeconds)
 
 void AEmberdeepEnemy::UpdateServerAI()
 {
-	AEmberdeepCharacter* Target = Cast<AEmberdeepCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0));
-	if (!Target || Target->IsDead())
+	AEmberdeepCharacter* Target = nullptr;
+	float NearestDistanceSquared = TNumericLimits<float>::Max();
+	for (TActorIterator<AEmberdeepCharacter> CharacterIt(GetWorld()); CharacterIt; ++CharacterIt)
+	{
+		AEmberdeepCharacter* Candidate = *CharacterIt;
+		if (!Candidate || Candidate->IsDead())
+		{
+			continue;
+		}
+
+		const float CandidateDistanceSquared = FVector::DistSquared2D(GetActorLocation(), Candidate->GetActorLocation());
+		if (CandidateDistanceSquared < NearestDistanceSquared)
+		{
+			NearestDistanceSquared = CandidateDistanceSquared;
+			Target = Candidate;
+		}
+	}
+
+	if (!Target)
 	{
 		return;
 	}

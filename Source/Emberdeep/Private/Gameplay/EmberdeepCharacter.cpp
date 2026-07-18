@@ -276,18 +276,32 @@ void AEmberdeepCharacter::UpdateMouseAim()
 	AimDirection.Z = 0.0f;
 	if (!AimDirection.IsNearlyZero())
 	{
+		AimDirection.Normalize();
 		SetActorRotation(AimDirection.Rotation());
+
+		const float Now = GetWorld()->GetTimeSeconds();
+		const bool bDirectionChanged = FVector::DotProduct(AimDirection, LastSentAimDirection) < 0.997f;
+		if (HasAuthority())
+		{
+			ReplicatedAimDirection = AimDirection;
+		}
+		else if (bDirectionChanged && Now >= NextAimReplicationTime)
+		{
+			LastSentAimDirection = AimDirection;
+			NextAimReplicationTime = Now + 0.05f;
+			ServerSetAimDirection(AimDirection);
+		}
 	}
 }
 
 void AEmberdeepCharacter::BasicAttack()
 {
-	PerformAttack(34.0f, 105.0f, 105.0f, 260.0f, BasicAttackCooldown);
+	RequestAttack(false);
 }
 
 void AEmberdeepCharacter::HeavyAttack()
 {
-	PerformAttack(62.0f, 155.0f, 125.0f, 620.0f, HeavyAttackCooldown);
+	RequestAttack(true);
 }
 
 void AEmberdeepCharacter::Dodge()
@@ -303,38 +317,80 @@ void AEmberdeepCharacter::Dodge()
 		Direction = GetActorForwardVector();
 	}
 
+	// Predict the cooldown display locally, but the host owns movement and invulnerability.
+	if (!HasAuthority())
+	{
+		NextDodgeTime = GetWorld()->GetTimeSeconds() + DodgeCooldown;
+		ServerDodge(Direction);
+		return;
+	}
+
+	ExecuteDodge(Direction);
+}
+
+void AEmberdeepCharacter::ExecuteDodge(const FVector& DodgeDirection)
+{
+	if (!HasAuthority() || IsDead() || GetWorld()->GetTimeSeconds() < NextDodgeTime)
+	{
+		return;
+	}
+
+	const FVector SafeDirection = DodgeDirection.GetSafeNormal2D();
+	if (SafeDirection.IsNearlyZero())
+	{
+		return;
+	}
+
 	NextDodgeTime = GetWorld()->GetTimeSeconds() + DodgeCooldown;
 	bInvulnerable = true;
-	LaunchCharacter(Direction * 920.0f, true, false);
+	LaunchCharacter(SafeDirection * 920.0f, true, false);
 	FTimerHandle DodgeTimer;
 	GetWorldTimerManager().SetTimer(DodgeTimer, this, &AEmberdeepCharacter::EndDodge, 0.24f, false);
 	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_INPUT Dodge"));
 }
 
-void AEmberdeepCharacter::PerformAttack(
-	float Damage,
-	float Radius,
-	float Reach,
-	float KnockbackStrength,
-	float Cooldown)
+void AEmberdeepCharacter::RequestAttack(bool bHeavyAttack)
 {
-	if (IsDead() || GetWorld()->GetTimeSeconds() < NextAttackTime)
-	{
-		return;
-	}
-
-	NextAttackTime = GetWorld()->GetTimeSeconds() + Cooldown;
-	ThorgrimAxeRoot->SetRelativeRotation(ThorgrimAxeRestingRotation + FRotator(0.0f, 0.0f, 85.0f));
-	FTimerHandle VisualTimer;
-	GetWorldTimerManager().SetTimer(VisualTimer, this, &AEmberdeepCharacter::ResetAttackVisual, 0.13f, false);
-
-	if (!HasAuthority())
+	if (IsDead())
 	{
 		return;
 	}
 
 	const FVector AttackDirection = GetActorForwardVector().GetSafeNormal2D();
-	const FVector AttackCenter = GetActorLocation() + AttackDirection * Reach;
+	if (HasAuthority())
+	{
+		ExecuteAttack(bHeavyAttack, AttackDirection);
+	}
+	else
+	{
+		ServerPerformAttack(bHeavyAttack, AttackDirection);
+	}
+}
+
+void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& AttackDirection)
+{
+	if (!HasAuthority() || IsDead() || GetWorld()->GetTimeSeconds() < NextAttackTime)
+	{
+		return;
+	}
+
+	const float Damage = bHeavyAttack ? 62.0f : 34.0f;
+	const float Radius = bHeavyAttack ? 155.0f : 105.0f;
+	const float Reach = bHeavyAttack ? 125.0f : 105.0f;
+	const float KnockbackStrength = bHeavyAttack ? 620.0f : 260.0f;
+	const float Cooldown = bHeavyAttack ? HeavyAttackCooldown : BasicAttackCooldown;
+	const FVector SafeAttackDirection = AttackDirection.GetSafeNormal2D();
+	if (SafeAttackDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	NextAttackTime = GetWorld()->GetTimeSeconds() + Cooldown;
+	ReplicatedAimDirection = SafeAttackDirection;
+	SetActorRotation(SafeAttackDirection.Rotation());
+	MulticastPlayAttackVisual(bHeavyAttack);
+
+	const FVector AttackCenter = GetActorLocation() + SafeAttackDirection * Reach;
 	FCollisionObjectQueryParams ObjectQuery;
 	ObjectQuery.AddObjectTypesToQuery(ECC_Pawn);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EmberdeepMeleeAttack), false, this);
@@ -360,11 +416,56 @@ void AEmberdeepCharacter::PerformAttack(
 		DamagedActors.Add(Target);
 		FPointDamageEvent DamageEvent;
 		DamageEvent.Damage = Damage;
-		DamageEvent.ShotDirection = AttackDirection * KnockbackStrength;
+		DamageEvent.ShotDirection = SafeAttackDirection * KnockbackStrength;
 		Target->TakeDamage(Damage, DamageEvent, GetController(), this);
 	}
 
-	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_COMBAT FighterAttack Damage=%.0f Hits=%d"), Damage, DamagedActors.Num());
+	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_COMBAT FighterAttack Type=%s Damage=%.0f Hits=%d"),
+		bHeavyAttack ? TEXT("Heavy") : TEXT("Basic"), Damage, DamagedActors.Num());
+}
+
+void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack)
+{
+	const float SwingDegrees = bHeavyAttack ? 125.0f : 85.0f;
+	const float SwingDuration = bHeavyAttack ? 0.20f : 0.13f;
+	ThorgrimAxeRoot->SetRelativeRotation(ThorgrimAxeRestingRotation + FRotator(0.0f, 0.0f, SwingDegrees));
+	FTimerHandle VisualTimer;
+	GetWorldTimerManager().SetTimer(VisualTimer, this, &AEmberdeepCharacter::ResetAttackVisual, SwingDuration, false);
+}
+
+void AEmberdeepCharacter::ServerSetAimDirection_Implementation(FVector_NetQuantizeNormal NewAimDirection)
+{
+	const FVector SafeDirection = FVector(NewAimDirection).GetSafeNormal2D();
+	if (!SafeDirection.IsNearlyZero() && !IsDead())
+	{
+		ReplicatedAimDirection = SafeDirection;
+		SetActorRotation(SafeDirection.Rotation());
+	}
+}
+
+void AEmberdeepCharacter::ServerPerformAttack_Implementation(
+	bool bHeavyAttack,
+	FVector_NetQuantizeNormal RequestedAimDirection)
+{
+	ExecuteAttack(bHeavyAttack, FVector(RequestedAimDirection));
+}
+
+void AEmberdeepCharacter::MulticastPlayAttackVisual_Implementation(bool bHeavyAttack)
+{
+	PlayAttackVisual(bHeavyAttack);
+}
+
+void AEmberdeepCharacter::ServerDodge_Implementation(FVector_NetQuantizeNormal RequestedDodgeDirection)
+{
+	ExecuteDodge(FVector(RequestedDodgeDirection));
+}
+
+void AEmberdeepCharacter::OnRep_AimDirection()
+{
+	if (!IsLocallyControlled() && !ReplicatedAimDirection.IsNearlyZero())
+	{
+		SetActorRotation(FVector(ReplicatedAimDirection).Rotation());
+	}
 }
 
 void AEmberdeepCharacter::ResetAttackVisual()
@@ -434,4 +535,5 @@ void AEmberdeepCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AEmberdeepCharacter, Gold);
+	DOREPLIFETIME(AEmberdeepCharacter, ReplicatedAimDirection);
 }
