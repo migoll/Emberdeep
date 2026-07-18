@@ -33,10 +33,12 @@ Grid-authentic voxel dark fantasy with pixel-art presentation, built in Unreal E
 ## Character voxel density
 
 - Characters should read as deliberately built from voxels, not as conventional polygonal models with a pixelated surface treatment.
-- Use large arrangements of the shared cells for the body and major equipment, medium arrangements for armour, hair, fur, and cloth, and individual cells only where facial or equipment readability needs them.
+- Normal gameplay characters target the simpler approved combat screenshot: large head, hands, class equipment, and broad costume regions with minimal surface dressing.
+- Author most body and equipment forms in 2x2 arrangements of the shared 4 cm cells. Isolated 4 cm cells are reserved for eyes, weapon tips, and silhouette-critical steps.
 - Preserve enough layered detail for helmets, shoulders, chest pieces, weapons, shields, cloaks, and upgraded gear to change the character visibly.
 - Judge detail from the normal gameplay camera. Close-up presentation may be denser, but tiny details that disappear during play should not drive the model.
-- Thorgrim is the current density benchmark: `SourceAssets/Characters/thorgrim/thorgrim_concept_primary.png`.
+- The playable comparison benchmark is `SourceAssets/Characters/fighter/fighter_v0_preview.png` at roughly 3,000 visible cells.
+- Thorgrim remains an upper-bound presentation experiment, not the default production density target.
 
 ## Environment voxel density
 

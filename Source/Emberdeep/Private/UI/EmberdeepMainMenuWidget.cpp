@@ -146,7 +146,9 @@ void UEmberdeepMainMenuWidget::LeaveMenuMode()
 	if (APlayerController* PlayerController = GetOwningPlayer())
 	{
 		PlayerController->SetPause(false);
-		PlayerController->SetInputMode(FInputModeGameOnly());
+		FInputModeGameOnly InputMode;
+		InputMode.SetConsumeCaptureMouseDown(false);
+		PlayerController->SetInputMode(InputMode);
 	}
 	RemoveFromParent();
 }

@@ -49,6 +49,18 @@ public:
 	float GetDodgeCooldownNormalized() const;
 
 	UFUNCTION(BlueprintPure, Category = "Combat")
+	float GetBasicAttackCooldownNormalized() const;
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	float GetBasicAttackFeedbackNormalized() const;
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	float GetBasicAttacksPerSecond() const;
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	bool IsBasicAttackQueued() const;
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
 	bool IsDead() const;
 
 protected:
@@ -61,8 +73,11 @@ private:
 	void ZoomCamera(float Value);
 	void UpdateMouseAim();
 	void BasicAttack();
+	void StopBasicAttack();
 	void HeavyAttack();
 	void Dodge();
+	void TogglePlayableCharacter();
+	void RebuildPlayableVoxelCharacter(bool bUseThorgrim);
 	void RequestAttack(bool bHeavyAttack);
 	void ExecuteAttack(bool bHeavyAttack, const FVector& AttackDirection);
 	void PlayAttackVisual(bool bHeavyAttack, int32 HitCount, int32 ComboStep);
@@ -72,16 +87,21 @@ private:
 	void UpdateVisualPresentation(float DeltaSeconds);
 	void ApplySteppedVisualPose(bool bForce = false);
 	void ResetHitVisual();
+	void UpdateThorgrimAnimation(float DeltaSeconds);
 	void ExecuteDodge(const FVector& DodgeDirection);
 	void ResetAttackVisual();
 	void EndDodge();
 	void HandleDeath();
+	float GetBasicAttackInterval() const;
 
 	UFUNCTION(Server, Unreliable)
 	void ServerSetAimDirection(FVector_NetQuantizeNormal NewAimDirection);
 
 	UFUNCTION(Server, Reliable)
 	void ServerPerformAttack(bool bHeavyAttack, FVector_NetQuantizeNormal RequestedAimDirection);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetBasicAttackHeld(bool bHeld, FVector_NetQuantizeNormal RequestedAimDirection);
 
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayAttackVisual(bool bHeavyAttack, int32 HitCount, int32 ComboStep);
@@ -97,6 +117,9 @@ private:
 
 	UFUNCTION()
 	void OnRep_AimDirection();
+
+	UFUNCTION()
+	void OnRep_EquippedWeaponVisual();
 
 	UPROPERTY(VisibleAnywhere, Category = "Camera")
 	TObjectPtr<USpringArmComponent> CameraBoom;
@@ -123,6 +146,11 @@ private:
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> ThorgrimMaterials;
 
 	TArray<FLinearColor> ThorgrimMaterialBaseColors;
+
+	// Runtime-only rest data for the rigid voxel rig. Each visible cell remains
+	// uniformly scaled and is assigned wholly to one procedural body zone.
+	TArray<TArray<FTransform>> ThorgrimRestTransformsByMesh;
+	TArray<TArray<uint8>> ThorgrimRigidBonesByMesh;
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UEmberdeepHealthComponent> HealthComponent;
@@ -151,8 +179,13 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_AimDirection)
 	FVector_NetQuantizeNormal ReplicatedAimDirection = FVector::ForwardVector;
 
+	UPROPERTY(ReplicatedUsing = OnRep_EquippedWeaponVisual)
+	FName EquippedWeaponVisualId = TEXT("NotchedIronAxe");
+
 	float NextAttackTime = 0.0f;
 	float LastBasicAttackTime = -10.0f;
+	float BasicAttackCooldownVisualEndTime = 0.0f;
+	float BasicAttackFeedbackStartTime = -1.0f;
 	float NextDodgeTime = 0.0f;
 	float NextAimReplicationTime = 0.0f;
 	float TargetOrthoWidth = 1100.0f;
@@ -181,6 +214,20 @@ private:
 	FVector ThorgrimAxeRestingLocation = FVector::ZeroVector;
 	FRotator ThorgrimShieldRestingRotation = FRotator::ZeroRotator;
 	FVector ThorgrimShieldRestingLocation = FVector::ZeroVector;
+	bool bBasicAttackHeld = false;
+	bool bBasicAttackQueued = false;
+	FVector QueuedBasicAttackDirection = FVector::ForwardVector;
+	FVector PlayableAxePivot = FVector::ZeroVector;
+	FVector PlayableShieldPivot = FVector::ZeroVector;
+	FString PlayableVoxelCharacterName;
+	float ThorgrimAnimationTime = 0.0f;
+	float ThorgrimPoseAccumulator = 0.0f;
+	float ThorgrimAttackTimeRemaining = 0.0f;
+	float ThorgrimAttackDuration = 0.0f;
+	float ThorgrimDodgeTimeRemaining = 0.0f;
+	float ThorgrimDodgeDuration = 0.28f;
+	bool bThorgrimHeavyAttack = false;
+	bool bUsingThorgrimVisual = false;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

@@ -17,8 +17,10 @@
 AEmberdeepPlayerController::AEmberdeepPlayerController()
 {
 	bShowMouseCursor = true;
-	bEnableClickEvents = true;
-	bEnableMouseOverEvents = true;
+	// Combat uses input bindings and mouse deprojection, not Actor click traces.
+	// Disabling click events keeps LMB on the gameplay input path.
+	bEnableClickEvents = false;
+	bEnableMouseOverEvents = false;
 }
 
 void AEmberdeepPlayerController::BeginPlay()
@@ -313,7 +315,9 @@ void AEmberdeepPlayerController::CloseGameplayWindowsLocal()
 		InventoryWidget->RemoveFromParent();
 	}
 	CurrentLootContainer = nullptr;
-	SetInputMode(FInputModeGameOnly());
+	FInputModeGameOnly InputMode;
+	InputMode.SetConsumeCaptureMouseDown(false);
+	SetInputMode(InputMode);
 	bShowMouseCursor = true;
 }
 

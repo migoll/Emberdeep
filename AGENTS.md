@@ -10,6 +10,7 @@ Emberdeep is a dark-fantasy action RPG. The long-term direction is server-author
 - Fixed near-isometric camera with an orthographic projection.
 - All visible solid art uses one 4 cm fundamental voxel lattice; this is not a destructible voxel world.
 - Larger forms are assembled from repeated 4 cm cells (for example, a 2x2 face), never made by stretching an individual voxel or placing arbitrary cuboids off-grid.
+- Normal gameplay characters use a restrained density: author most forms as 2x2-cell modules and reserve isolated 4 cm cells for silhouette-critical accents. Thorgrim is an upper-bound experiment, not the production default.
 - Characters, equipment, props, and environments share the same cell size. Animation may translate and rotate rigid voxel clusters, but must not shear or non-uniformly scale their cells.
 - Glows, particles, fog, telegraphs, and other effects are the deliberate exceptions to the solid-geometry lattice.
 - Oversized heads, hands, weapons, shields, and shoulder armour.

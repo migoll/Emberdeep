@@ -2,7 +2,7 @@
 
 ## Status
 
-Thorgrim is the first playable visual proof for Emberdeep's agreed character density. The v0 model is a static, code-instanced voxel character with a separate portable mesh export. It proves silhouette, scale, palette, equipment readability, and lighting in the current prototype; skeletal deformation and authored animation are a later conversion step.
+Thorgrim is the first playable visual proof for Emberdeep's agreed character density. The v0 model is a code-instanced voxel character with a separate portable mesh export. It proves silhouette, scale, palette, equipment readability, lighting, and stepped rigid-cluster animation in the current prototype; an authored skeletal animation library remains a later conversion step.
 
 ## Design authority
 
@@ -58,9 +58,20 @@ Legacy GLB output:
 
 The runtime representation deliberately avoids one component per voxel. Part, palette, and shade batching creates 81 instanced components. Keeping the axe and shield on separate 4 cm-snapped pivots preserves attack feedback now and leaves a clean path to replace either item later.
 
+## Runtime animation proof
+
+The current Unreal prototype classifies the body voxels into six rigid spatial zones: torso, head, left/right arms, and left/right legs. It evaluates a new visual pose at 12 frames per second while gameplay movement and collision remain continuous.
+
+- Idle: restrained breathing, weight shift, and head motion.
+- Locomotion: alternating rigid arm and leg swings inferred from velocity, including replicated remote movement.
+- Attack: body commitment, right-arm axe swing, and shield brace driven through the existing replicated attack visual.
+- Voxel integrity: every cell retains its original 4 cm scale; animation only translates or rotates rigid groups.
+
+This is a lightweight in-engine proof, not the final production rig. The spatial grouping is intentionally coarse and may include cloak or armour cells near a limb. It exists so animation timing and readability can be tested in-game before the one-time authored rig conversion.
+
 ## Future skeletal conversion
 
-Import the OBJ into Blender, preserve the block silhouette, remove hidden and coplanar faces, and split the axe and shield from the body. Build a compact humanoid rig with rigid weights, export FBX 2020.2, and retain the current runtime construction as a fallback until the skeletal asset is validated in Unreal.
+Import the OBJ into Blender, preserve the block silhouette, remove hidden and coplanar faces, and split the axe and shield from the body. Build a compact humanoid rig with rigid weights, export FBX 2020.2, and retain the current runtime construction as a fallback until the skeletal asset is validated in Unreal. Once that Skeletal Mesh exists, external humanoid clips such as the CC0 Quaternius animation libraries can be retargeted with Unreal's IK Retargeter and then reduced to the project's stepped visual timing.
 
 Suggested runtime names:
 

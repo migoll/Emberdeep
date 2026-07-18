@@ -21,6 +21,7 @@ private:
 	void DrawPanel(float X, float Y, float Width, float Height);
 	void DrawCenteredText(const FString& Text, const FLinearColor& Color, float CenterX, float Y, UFont* Font, float Scale = 1.0f);
 	void DrawOrb(const FVector2D& Center, float Radius, float NormalizedValue, const FLinearColor& FillColor);
+	void DrawRadialCooldown(const FVector2D& Center, const FVector2D& HalfSize, float NormalizedRemaining);
 	void DrawOrnamentSection(
 		float X,
 		float Y,

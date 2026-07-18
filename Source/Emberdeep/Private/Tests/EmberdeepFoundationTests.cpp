@@ -112,6 +112,9 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 		TEXT("Attacks must enter through a server RPC"),
 		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("ServerPerformAttack")));
 	TestNotNull(
+		TEXT("Held basic attacks must enter through a server RPC"),
+		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("ServerSetBasicAttackHeld")));
+	TestNotNull(
 		TEXT("Aim direction must be reported to the server"),
 		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("ServerSetAimDirection")));
 	TestNotNull(
@@ -136,21 +139,21 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 	const AEmberdeepCharacter* CharacterDefault = AEmberdeepCharacter::StaticClass()->GetDefaultObject<AEmberdeepCharacter>();
 	TestEqual(TEXT("Characters begin at level one"), CharacterDefault->GetCharacterLevel(), 1);
 	TestEqual(TEXT("Characters begin with an empty XP bar"), CharacterDefault->GetExperienceNormalized(), 0.0f);
-	TArray<UInstancedStaticMeshComponent*> ThorgrimPaletteMeshes;
-	CharacterDefault->GetComponents<UInstancedStaticMeshComponent>(ThorgrimPaletteMeshes);
-	TestEqual(TEXT("Thorgrim must provide three shades for each part and palette"), ThorgrimPaletteMeshes.Num(), 90);
+	TArray<UInstancedStaticMeshComponent*> CharacterPaletteMeshes;
+	CharacterDefault->GetComponents<UInstancedStaticMeshComponent>(CharacterPaletteMeshes);
+	TestEqual(TEXT("The playable fighter must provide three shades for each part and palette"), CharacterPaletteMeshes.Num(), 99);
 
-	int32 ThorgrimInstanceCount = 0;
-	for (const UInstancedStaticMeshComponent* PaletteMesh : ThorgrimPaletteMeshes)
+	int32 CharacterInstanceCount = 0;
+	for (const UInstancedStaticMeshComponent* PaletteMesh : CharacterPaletteMeshes)
 	{
-		ThorgrimInstanceCount += PaletteMesh->GetInstanceCount();
+		CharacterInstanceCount += PaletteMesh->GetInstanceCount();
 	}
 	TestTrue(
-		TEXT("Thorgrim must retain a substantial fixed-grid miniature silhouette"),
-		ThorgrimInstanceCount >= 3000 && ThorgrimInstanceCount <= 7000);
+		TEXT("The comparison fighter and starter equipment must retain their lower density budget"),
+		CharacterInstanceCount >= 3000 && CharacterInstanceCount <= 5000);
 	TestTrue(
-		TEXT("Every Thorgrim cell must use the shared 4 cm lattice"),
-		ValidateFixedVoxelMeshes(*this, TEXT("Thorgrim"), ThorgrimPaletteMeshes));
+		TEXT("Every fighter cell must use the shared 4 cm lattice"),
+		ValidateFixedVoxelMeshes(*this, TEXT("Low-density fighter"), CharacterPaletteMeshes));
 
 	const AEmberdeepCampEnvironment* CampDefault =
 		AEmberdeepCampEnvironment::StaticClass()->GetDefaultObject<AEmberdeepCampEnvironment>();

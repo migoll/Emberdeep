@@ -39,6 +39,7 @@ namespace
 		Steel,
 		Ash,
 		Brass,
+		Bone,
 		Hide,
 		Fur,
 		Skin,
@@ -69,6 +70,42 @@ namespace
 		int16 Z;
 	};
 
+	enum class EThorgrimRigidBone : uint8
+	{
+		Torso,
+		Head,
+		LeftArm,
+		RightArm,
+		LeftLeg,
+		RightLeg,
+		Count
+	};
+
+	struct FPlayableVoxelBonePose
+	{
+		FQuat Rotation;
+		FVector Translation;
+	};
+
+	struct FPlayableVoxelAnimationClip
+	{
+		const TCHAR* Name;
+		bool bLoop;
+		float Duration;
+		float SamplesPerSecond;
+		int32 FrameCount;
+		const FPlayableVoxelBonePose* Frames;
+	};
+
+	struct FPlayableEquipmentVisual
+	{
+		const TCHAR* DefinitionId;
+		const FThorgrimVoxelCell* Cells;
+		int32 CellCount;
+	};
+
+	static constexpr int32 GPlayableAnimationBoneCount = 8;
+
 	const FThorgrimPartDefinition GThorgrimPartDefinitions[] =
 	{
 		{ EThorgrimPart::Body, TEXT("Body") },
@@ -86,6 +123,8 @@ namespace
 			FLinearColor(0.22f, 0.25f, 0.28f), FLinearColor(0.36f, 0.40f, 0.44f), FLinearColor(0.56f, 0.61f, 0.64f) } },
 		{ EThorgrimPalette::Brass, TEXT("Brass"), {
 			FLinearColor(0.16f, 0.065f, 0.010f), FLinearColor(0.34f, 0.15f, 0.025f), FLinearColor(0.58f, 0.32f, 0.060f) } },
+		{ EThorgrimPalette::Bone, TEXT("Bone"), {
+			FLinearColor(0.42f, 0.34f, 0.23f), FLinearColor(0.63f, 0.52f, 0.36f), FLinearColor(0.80f, 0.70f, 0.52f) } },
 		{ EThorgrimPalette::Hide, TEXT("Hide"), {
 			FLinearColor(0.12f, 0.045f, 0.018f), FLinearColor(0.25f, 0.10f, 0.035f), FLinearColor(0.39f, 0.18f, 0.065f) } },
 		{ EThorgrimPalette::Fur, TEXT("Fur"), {
@@ -100,7 +139,7 @@ namespace
 			FLinearColor(0.16f, 0.003f, 0.006f), FLinearColor(0.40f, 0.010f, 0.014f), FLinearColor(0.72f, 0.026f, 0.020f) } }
 	};
 
-	int32 PositiveModulo(int32 Value, int32 Divisor)
+	int32 PositiveModuloCharacter(int32 Value, int32 Divisor)
 	{
 		const int32 Result = Value % Divisor;
 		return Result < 0 ? Result + Divisor : Result;
@@ -132,26 +171,27 @@ namespace
 			{
 				return 0;
 			}
-			return ClusterHash % 13u == 12u || PositiveModulo(Voxel.Y + Voxel.Z, 11) == 0 ? 2 : 1;
+			return ClusterHash % 13u == 12u || PositiveModuloCharacter(Voxel.Y + Voxel.Z, 11) == 0 ? 2 : 1;
 
 		case EThorgrimPalette::Hide:
-			if (PositiveModulo(Voxel.X + Voxel.Z * 2, 13) == 0)
+			if (PositiveModuloCharacter(Voxel.X + Voxel.Z * 2, 13) == 0)
 			{
 				return 2;
 			}
 			return ClusterHash % 9u < 2u ? 0 : 1;
 
 		case EThorgrimPalette::Wood:
-			if (PositiveModulo(Voxel.Y + Voxel.Z * 2, 9) == 0)
+			if (PositiveModuloCharacter(Voxel.Y + Voxel.Z * 2, 9) == 0)
 			{
 				return 2;
 			}
-			return PositiveModulo(Voxel.Y + Voxel.Z * 2, 9) <= 2 ? 0 : 1;
+			return PositiveModuloCharacter(Voxel.Y + Voxel.Z * 2, 9) <= 2 ? 0 : 1;
 
 		case EThorgrimPalette::Steel:
 		case EThorgrimPalette::Ash:
 		case EThorgrimPalette::Brass:
-			if (PositiveModulo(Voxel.X + Voxel.Y * 2 + Voxel.Z * 3, 17) == 0)
+		case EThorgrimPalette::Bone:
+			if (PositiveModuloCharacter(Voxel.X + Voxel.Y * 2 + Voxel.Z * 3, 17) == 0)
 			{
 				return 2;
 			}
@@ -160,7 +200,7 @@ namespace
 		case EThorgrimPalette::Night:
 		case EThorgrimPalette::Cloth:
 		case EThorgrimPalette::Crimson:
-			if (PositiveModulo(Voxel.X + Voxel.Y + Voxel.Z, 15) == 0)
+			if (PositiveModuloCharacter(Voxel.X + Voxel.Y + Voxel.Z, 15) == 0)
 			{
 				return 2;
 			}
@@ -183,123 +223,83 @@ namespace
 			+ ShadeIndex;
 	}
 
-	// Authored directly on the shared 4 cm lattice. This deliberately uses broad,
-	// readable clusters instead of thousands of noisy micro-voxels: helmet,
-	// shoulders, tabard, sword and shield must remain distinct at gameplay scale.
-	static const FVector GThorgrimAxePivot(0.0f, 48.0f, -16.0f);
-	static const FVector GThorgrimShieldPivot(0.0f, -48.0f, -16.0f);
-
-	TArray<FThorgrimVoxelCell> BuildThorgrimVoxelCells()
+	EThorgrimRigidBone SelectThorgrimRigidBone(const FThorgrimVoxelCell& Voxel)
 	{
-		TMap<int64, FThorgrimVoxelCell> Cells;
-		const auto AddCell = [&Cells](EThorgrimPart Part, EThorgrimPalette Palette, int32 X, int32 Y, int32 Z)
+		if (Voxel.Part != EThorgrimPart::Body)
 		{
-			const int64 Key =
-				(static_cast<int64>(Part) << 48)
-				| (static_cast<int64>(X + 128) << 32)
-				| (static_cast<int64>(Y + 128) << 16)
-				| static_cast<int64>(Z + 128);
-			Cells.Add(Key, FThorgrimVoxelCell{
-				Part, Palette, static_cast<int16>(X), static_cast<int16>(Y), static_cast<int16>(Z) });
-		};
-		const auto AddBox = [&AddCell](
-			EThorgrimPart Part,
-			EThorgrimPalette Palette,
-			const FIntVector& Min,
-			const FIntVector& Max)
-		{
-			for (int32 Z = Min.Z; Z <= Max.Z; ++Z)
-			{
-				for (int32 Y = Min.Y; Y <= Max.Y; ++Y)
-				{
-					for (int32 X = Min.X; X <= Max.X; ++X)
-					{
-						AddCell(Part, Palette, X, Y, Z);
-					}
-				}
-			}
-		};
-
-		// Planted boots and separated legs prevent the hero becoming a single lump.
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Night, FIntVector(-3, -6, -20), FIntVector(3, -2, -20));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Night, FIntVector(-3, 2, -20), FIntVector(3, 6, -20));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(-2, -6, -19), FIntVector(2, -2, -16));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(-2, 2, -19), FIntVector(2, 6, -16));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Cloth, FIntVector(-2, -5, -15), FIntVector(2, -2, -9));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Cloth, FIntVector(-2, 2, -15), FIntVector(2, 5, -9));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(3, -5, -14), FIntVector(4, -2, -12));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(3, 2, -14), FIntVector(4, 5, -12));
-
-		// Broad plated torso, oversized pauldrons and raised crimson cloth planes.
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(-3, -6, -8), FIntVector(3, 6, 7));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Night, FIntVector(-4, -6, -7), FIntVector(-4, 6, 6));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Crimson, FIntVector(4, -3, -8), FIntVector(4, 3, 3));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Brass, FIntVector(4, -4, 4), FIntVector(4, 4, 4));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Crimson, FIntVector(-5, -5, -5), FIntVector(-5, 5, 7));
-		for (const int32 Side : {-1, 1})
-		{
-			const int32 ShoulderMinY = Side < 0 ? -11 : 7;
-			const int32 ShoulderMaxY = Side < 0 ? -7 : 11;
-			AddBox(EThorgrimPart::Body, EThorgrimPalette::Ash,
-				FIntVector(-4, ShoulderMinY, 4), FIntVector(4, ShoulderMaxY, 10));
-			const int32 ArmMinY = Side < 0 ? -13 : 10;
-			const int32 ArmMaxY = Side < 0 ? -10 : 13;
-			AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel,
-				FIntVector(-2, ArmMinY, -3), FIntVector(2, ArmMaxY, 5));
-			const int32 HandMinY = Side < 0 ? -15 : 13;
-			const int32 HandMaxY = Side < 0 ? -13 : 15;
-			AddBox(EThorgrimPart::Body, EThorgrimPalette::Hide,
-				FIntVector(-1, HandMinY, -5), FIntVector(1, HandMaxY, -2));
+			return EThorgrimRigidBone::Torso;
 		}
-
-		// A compact great-helm with a black eye slit and a red crest is readable from
-		// every rotation, while the front planes still make facing obvious.
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Night, FIntVector(-2, -3, 8), FIntVector(2, 3, 10));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(-3, -5, 10), FIntVector(3, 5, 19));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Ash, FIntVector(4, -5, 16), FIntVector(4, 5, 19));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Night, FIntVector(4, -4, 14), FIntVector(4, 4, 15));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(4, -5, 10), FIntVector(4, -4, 13));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(4, 4, 10), FIntVector(4, 5, 13));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Brass, FIntVector(5, -1, 11), FIntVector(5, 1, 13));
-		AddBox(EThorgrimPart::Body, EThorgrimPalette::Crimson, FIntVector(-1, -2, 20), FIntVector(1, 2, 23));
-
-		// Oversized sword: dark grip, brass guard, broad steel blade and pale edge.
-		AddBox(EThorgrimPart::Axe, EThorgrimPalette::Wood, FIntVector(-1, -1, -5), FIntVector(1, 1, 3));
-		AddBox(EThorgrimPart::Axe, EThorgrimPalette::Brass, FIntVector(-2, -2, -7), FIntVector(2, 2, -5));
-		AddBox(EThorgrimPart::Axe, EThorgrimPalette::Brass, FIntVector(-1, -6, 4), FIntVector(1, 6, 5));
-		AddBox(EThorgrimPart::Axe, EThorgrimPalette::Steel, FIntVector(-1, -2, 6), FIntVector(1, 2, 22));
-		AddBox(EThorgrimPart::Axe, EThorgrimPalette::Ash, FIntVector(2, -2, 7), FIntVector(2, 2, 21));
-		AddBox(EThorgrimPart::Axe, EThorgrimPalette::Ash, FIntVector(-1, -1, 23), FIntVector(1, 1, 24));
-
-		// Heater shield: thick gunmetal silhouette, brass rim and raised crimson mark.
-		for (int32 Z = -8; Z <= 8; ++Z)
+		if (Voxel.Z >= 11 && FMath::Abs(static_cast<int32>(Voxel.Y)) <= 8)
 		{
-			const int32 HalfWidth = Z < -3 ? FMath::Clamp(Z + 9, 2, 6) : 6;
-			for (int32 Y = -HalfWidth; Y <= HalfWidth; ++Y)
-			{
-				for (int32 X = 0; X <= 2; ++X)
-				{
-					AddCell(EThorgrimPart::Shield, EThorgrimPalette::Steel, X, Y, Z);
-				}
-				const bool bRim = Y == -HalfWidth || Y == HalfWidth || Z == 8;
-				AddCell(EThorgrimPart::Shield, bRim ? EThorgrimPalette::Brass : EThorgrimPalette::Night, 3, Y, Z);
-			}
+			return EThorgrimRigidBone::Head;
 		}
-		AddBox(EThorgrimPart::Shield, EThorgrimPalette::Crimson, FIntVector(4, -1, -5), FIntVector(4, 1, 5));
-		AddBox(EThorgrimPart::Shield, EThorgrimPalette::Crimson, FIntVector(4, -4, 2), FIntVector(4, 4, 4));
-
-		TArray<FThorgrimVoxelCell> Result;
-		Cells.GenerateValueArray(Result);
-		Result.Sort([](const FThorgrimVoxelCell& A, const FThorgrimVoxelCell& B)
+		if (Voxel.Z <= -6)
 		{
-			if (A.Part != B.Part) return A.Part < B.Part;
-			if (A.Palette != B.Palette) return A.Palette < B.Palette;
-			if (A.Z != B.Z) return A.Z < B.Z;
-			if (A.Y != B.Y) return A.Y < B.Y;
-			return A.X < B.X;
-		});
-		return Result;
+			return Voxel.Y < 0 ? EThorgrimRigidBone::LeftLeg : EThorgrimRigidBone::RightLeg;
+		}
+		if (Voxel.Z <= 5 && Voxel.Y <= -9)
+		{
+			return EThorgrimRigidBone::LeftArm;
+		}
+		if (Voxel.Z <= 5 && Voxel.Y >= 9)
+		{
+			return EThorgrimRigidBone::RightArm;
+		}
+		return EThorgrimRigidBone::Torso;
 	}
+
+	FVector GetThorgrimBonePivot(EThorgrimRigidBone Bone)
+	{
+		switch (Bone)
+		{
+		case EThorgrimRigidBone::Head:
+			return FVector(8.0f, 0.0f, 46.0f);
+		case EThorgrimRigidBone::LeftArm:
+			return FVector(4.0f, -40.0f, 20.0f);
+		case EThorgrimRigidBone::RightArm:
+			return FVector(4.0f, 40.0f, 20.0f);
+		case EThorgrimRigidBone::LeftLeg:
+			return FVector(4.0f, -16.0f, -20.0f);
+		case EThorgrimRigidBone::RightLeg:
+			return FVector(4.0f, 16.0f, -20.0f);
+		default:
+			return FVector(4.0f, 0.0f, 0.0f);
+		}
+	}
+
+	namespace FighterVoxelData
+	{
+#include "FighterVoxelData.inl"
+#include "FighterAnimationData.inl"
+	}
+
+	namespace FighterEquipmentData
+	{
+#include "FighterEquipmentData.inl"
+
+		const FPlayableEquipmentVisual& FindMainHandVisual(FName DefinitionId)
+		{
+			for (const FPlayableEquipmentVisual& Visual : GMainHandEquipmentVisuals)
+			{
+				if (DefinitionId == FName(Visual.DefinitionId))
+				{
+					return Visual;
+				}
+			}
+			return GMainHandEquipmentVisuals[0];
+		}
+	}
+
+	namespace ThorgrimVoxelData
+	{
+#include "ThorgrimVoxelData.inl"
+		static constexpr const TCHAR* GPlayableVoxelCharacterName = TEXT("Thorgrim");
+		static const FQuat GPlayableAxeRestingRotation = FQuat::Identity;
+		static const FQuat GPlayableShieldRestingRotation = FQuat::Identity;
+	}
+
+	static_assert(FighterVoxelData::GThorgrimVoxelUnitCm == EmberdeepVoxelStyle::UnitCm);
+	static_assert(ThorgrimVoxelData::GThorgrimVoxelUnitCm == EmberdeepVoxelStyle::UnitCm);
 }
 
 AEmberdeepCharacter::AEmberdeepCharacter()
@@ -359,18 +359,19 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 
 	ThorgrimAxeRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ThorgrimAxeRoot"));
 	ThorgrimAxeRoot->SetupAttachment(ThorgrimVisualRoot);
-	ThorgrimAxeRoot->SetRelativeLocation(GThorgrimAxePivot);
+	ThorgrimAxeRoot->SetRelativeLocation(FighterVoxelData::GThorgrimAxePivot);
+	ThorgrimAxeRoot->SetRelativeRotation(FighterVoxelData::GPlayableAxeRestingRotation.Rotator());
 
 	ThorgrimShieldRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ThorgrimShieldRoot"));
 	ThorgrimShieldRoot->SetupAttachment(ThorgrimVisualRoot);
-	ThorgrimShieldRoot->SetRelativeLocation(GThorgrimShieldPivot);
+	ThorgrimShieldRoot->SetRelativeLocation(FighterVoxelData::GThorgrimShieldPivot);
+	ThorgrimShieldRoot->SetRelativeRotation(FighterVoxelData::GPlayableShieldRestingRotation.Rotator());
 
-	TMap<int32, UInstancedStaticMeshComponent*> PaletteMeshes;
-	TArray<TArray<FTransform>> VoxelTransformsByMesh;
-	VoxelTransformsByMesh.SetNum(
+	ThorgrimRestTransformsByMesh.SetNum(
 		UE_ARRAY_COUNT(GThorgrimPartDefinitions)
 		* UE_ARRAY_COUNT(GThorgrimPaletteDefinitions)
 		* EmberdeepVoxelStyle::ShadeCount);
+	ThorgrimRigidBonesByMesh.SetNum(ThorgrimRestTransformsByMesh.Num());
 	for (const FThorgrimPartDefinition& PartDefinition : GThorgrimPartDefinitions)
 	{
 		USceneComponent* PartRoot = ThorgrimBodyRoot;
@@ -403,27 +404,11 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 				PaletteMesh->SetStaticMesh(CubeMesh.Object);
 				PaletteMesh->SetMaterial(0, VoxelMaterial);
 				ThorgrimPaletteMeshes.Add(PaletteMesh);
-				PaletteMeshes.Add(
-					GetThorgrimMeshKey(PartDefinition.Part, PaletteDefinition.Palette, ShadeIndex),
-					PaletteMesh);
 			}
 		}
 	}
 
-	const TArray<FThorgrimVoxelCell> ThorgrimVoxelCells = BuildThorgrimVoxelCells();
-	for (const FThorgrimVoxelCell& Voxel : ThorgrimVoxelCells)
-	{
-		const int32 ShadeIndex = SelectThorgrimMaterialShade(Voxel);
-		const int32 MeshKey = GetThorgrimMeshKey(Voxel.Part, Voxel.Palette, ShadeIndex);
-		VoxelTransformsByMesh[MeshKey].Add(FTransform(
-			FQuat::Identity,
-			EmberdeepVoxelStyle::CellCenter(Voxel.X, Voxel.Y, Voxel.Z),
-			EmberdeepVoxelStyle::InstanceScale()));
-	}
-	for (const TPair<int32, UInstancedStaticMeshComponent*>& PaletteMesh : PaletteMeshes)
-	{
-		PaletteMesh.Value->AddInstances(VoxelTransformsByMesh[PaletteMesh.Key], false, false, false);
-	}
+	RebuildPlayableVoxelCharacter(false);
 
 	HealthComponent = CreateDefaultSubobject<UEmberdeepHealthComponent>(TEXT("HealthComponent"));
 	HealthComponent->SetMaxHealth(190.0f);
@@ -434,6 +419,17 @@ void AEmberdeepCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UpdateVisualPresentation(DeltaSeconds);
+	UpdateThorgrimAnimation(DeltaSeconds);
+	if (HasAuthority()
+		&& (bBasicAttackQueued || bBasicAttackHeld)
+		&& !IsDead()
+		&& GetWorld()->GetTimeSeconds() >= NextAttackTime)
+	{
+		const FVector AttackDirection = bBasicAttackHeld
+			? FVector(ReplicatedAimDirection).GetSafeNormal2D()
+			: QueuedBasicAttackDirection;
+		ExecuteAttack(false, AttackDirection);
+	}
 
 	if (IsLocallyControlled())
 	{
@@ -496,7 +492,8 @@ void AEmberdeepCharacter::BeginPlay()
 	UE_LOG(
 		LogEmberdeep,
 		Display,
-		TEXT("EMBERDEEP_VISUAL ThorgrimGenerated Instances=%d Materials=%d"),
+		TEXT("EMBERDEEP_VISUAL %sGenerated Instances=%d Materials=%d"),
+		*PlayableVoxelCharacterName,
 		ThorgrimInstanceCount,
 		ThorgrimMaterialCount);
 
@@ -526,8 +523,116 @@ void AEmberdeepCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 	PlayerInputComponent->BindAxis(TEXT("MoveRight"), this, &AEmberdeepCharacter::MoveRight);
 	PlayerInputComponent->BindAxis(TEXT("ZoomCamera"), this, &AEmberdeepCharacter::ZoomCamera);
 	PlayerInputComponent->BindAction(TEXT("BasicAttack"), IE_Pressed, this, &AEmberdeepCharacter::BasicAttack);
+	PlayerInputComponent->BindAction(TEXT("BasicAttack"), IE_Released, this, &AEmberdeepCharacter::StopBasicAttack);
 	PlayerInputComponent->BindAction(TEXT("HeavyAttack"), IE_Pressed, this, &AEmberdeepCharacter::HeavyAttack);
 	PlayerInputComponent->BindAction(TEXT("Dodge"), IE_Pressed, this, &AEmberdeepCharacter::Dodge);
+	PlayerInputComponent->BindAction(TEXT("SwitchCharacter"), IE_Pressed, this, &AEmberdeepCharacter::TogglePlayableCharacter);
+}
+
+void AEmberdeepCharacter::TogglePlayableCharacter()
+{
+	RebuildPlayableVoxelCharacter(!bUsingThorgrimVisual);
+}
+
+void AEmberdeepCharacter::RebuildPlayableVoxelCharacter(bool bUseThorgrim)
+{
+	const FThorgrimVoxelCell* VoxelCells = bUseThorgrim
+		? ThorgrimVoxelData::GThorgrimVoxelCells
+		: FighterVoxelData::GThorgrimVoxelCells;
+	const int32 VoxelCount = bUseThorgrim
+		? ThorgrimVoxelData::GThorgrimVoxelCount
+		: FighterVoxelData::GThorgrimVoxelCount;
+	const FVector AxePivot = bUseThorgrim
+		? ThorgrimVoxelData::GThorgrimAxePivot
+		: FighterVoxelData::GThorgrimAxePivot;
+	const FVector ShieldPivot = bUseThorgrim
+		? ThorgrimVoxelData::GThorgrimShieldPivot
+		: FighterVoxelData::GThorgrimShieldPivot;
+	const FQuat AxeRotation = bUseThorgrim
+		? ThorgrimVoxelData::GPlayableAxeRestingRotation
+		: FighterVoxelData::GPlayableAxeRestingRotation;
+	const FQuat ShieldRotation = bUseThorgrim
+		? ThorgrimVoxelData::GPlayableShieldRestingRotation
+		: FighterVoxelData::GPlayableShieldRestingRotation;
+
+	for (TArray<FTransform>& RestTransforms : ThorgrimRestTransformsByMesh)
+	{
+		RestTransforms.Reset();
+	}
+	for (TArray<uint8>& RigidBones : ThorgrimRigidBonesByMesh)
+	{
+		RigidBones.Reset();
+	}
+	for (UInstancedStaticMeshComponent* PaletteMesh : ThorgrimPaletteMeshes)
+	{
+		if (PaletteMesh)
+		{
+			PaletteMesh->ClearInstances();
+		}
+	}
+
+	const auto AddVoxel = [this](const FThorgrimVoxelCell& Voxel)
+	{
+		const int32 ShadeIndex = SelectThorgrimMaterialShade(Voxel);
+		const int32 MeshKey = GetThorgrimMeshKey(Voxel.Part, Voxel.Palette, ShadeIndex);
+		ThorgrimRestTransformsByMesh[MeshKey].Add(FTransform(
+			FQuat::Identity,
+			EmberdeepVoxelStyle::CellCenter(Voxel.X, Voxel.Y, Voxel.Z),
+			EmberdeepVoxelStyle::InstanceScale()));
+		ThorgrimRigidBonesByMesh[MeshKey].Add(static_cast<uint8>(SelectThorgrimRigidBone(Voxel)));
+	};
+	for (int32 VoxelIndex = 0; VoxelIndex < VoxelCount; ++VoxelIndex)
+	{
+		AddVoxel(VoxelCells[VoxelIndex]);
+	}
+
+	int32 EquipmentVoxelCount = 0;
+	if (!bUseThorgrim)
+	{
+		const FPlayableEquipmentVisual& MainHand =
+			FighterEquipmentData::FindMainHandVisual(EquippedWeaponVisualId);
+		for (int32 VoxelIndex = 0; VoxelIndex < MainHand.CellCount; ++VoxelIndex)
+		{
+			AddVoxel(MainHand.Cells[VoxelIndex]);
+		}
+		for (int32 VoxelIndex = 0; VoxelIndex < FighterEquipmentData::GDefaultOffHandVisual.CellCount; ++VoxelIndex)
+		{
+			AddVoxel(FighterEquipmentData::GDefaultOffHandVisual.Cells[VoxelIndex]);
+		}
+		EquipmentVoxelCount = MainHand.CellCount + FighterEquipmentData::GDefaultOffHandVisual.CellCount;
+	}
+	for (int32 MeshIndex = 0; MeshIndex < ThorgrimPaletteMeshes.Num(); ++MeshIndex)
+	{
+		if (ThorgrimPaletteMeshes[MeshIndex] && ThorgrimRestTransformsByMesh.IsValidIndex(MeshIndex))
+		{
+			ThorgrimPaletteMeshes[MeshIndex]->AddInstances(
+				ThorgrimRestTransformsByMesh[MeshIndex], false, false, false);
+		}
+	}
+
+	bUsingThorgrimVisual = bUseThorgrim;
+	PlayableVoxelCharacterName = bUseThorgrim
+		? ThorgrimVoxelData::GPlayableVoxelCharacterName
+		: FighterVoxelData::GPlayableVoxelCharacterName;
+	PlayableAxePivot = AxePivot;
+	PlayableShieldPivot = ShieldPivot;
+	ThorgrimAxeRoot->SetRelativeLocation(PlayableAxePivot);
+	ThorgrimAxeRoot->SetRelativeRotation(AxeRotation.Rotator());
+	ThorgrimShieldRoot->SetRelativeLocation(PlayableShieldPivot);
+	ThorgrimShieldRoot->SetRelativeRotation(ShieldRotation.Rotator());
+	ThorgrimAxeRestingRotation = ThorgrimAxeRoot->GetRelativeRotation();
+	ThorgrimShieldRestingRotation = ThorgrimShieldRoot->GetRelativeRotation();
+	ThorgrimAttackTimeRemaining = 0.0f;
+	ThorgrimAttackDuration = 0.0f;
+	ThorgrimDodgeTimeRemaining = 0.0f;
+	ThorgrimPoseAccumulator = 1.0f;
+
+	UE_LOG(
+		LogEmberdeep,
+		Display,
+		TEXT("EMBERDEEP_VISUAL SwitchedCharacter Name=%s Instances=%d"),
+		*PlayableVoxelCharacterName,
+		VoxelCount + EquipmentVoxelCount);
 }
 
 void AEmberdeepCharacter::MoveForward(float Value)
@@ -721,7 +826,34 @@ void AEmberdeepCharacter::UpdateMouseAim()
 
 void AEmberdeepCharacter::BasicAttack()
 {
-	RequestAttack(false);
+	const float Now = GetWorld()->GetTimeSeconds();
+	bBasicAttackHeld = true;
+	BasicAttackFeedbackStartTime = Now;
+	UE_LOG(
+		LogEmberdeep,
+		Display,
+		TEXT("EMBERDEEP_INPUT BasicAttack Pressed Ready=%d RecoveryRemaining=%.3f Queued=%d"),
+		Now >= NextAttackTime ? 1 : 0,
+		FMath::Max(0.0f, NextAttackTime - Now),
+		bBasicAttackQueued ? 1 : 0);
+	const FVector AttackDirection = GetActorForwardVector().GetSafeNormal2D();
+	if (HasAuthority())
+	{
+		ExecuteAttack(false, AttackDirection);
+	}
+	else
+	{
+		ServerSetBasicAttackHeld(true, AttackDirection);
+	}
+}
+
+void AEmberdeepCharacter::StopBasicAttack()
+{
+	bBasicAttackHeld = false;
+	if (!HasAuthority())
+	{
+		ServerSetBasicAttackHeld(false, GetActorForwardVector().GetSafeNormal2D());
+	}
 }
 
 void AEmberdeepCharacter::HeavyAttack()
@@ -768,6 +900,9 @@ void AEmberdeepCharacter::ExecuteDodge(const FVector& DodgeDirection)
 
 	NextDodgeTime = GetWorld()->GetTimeSeconds() + DodgeCooldown;
 	bInvulnerable = true;
+	ThorgrimDodgeDuration = 0.28f;
+	ThorgrimDodgeTimeRemaining = ThorgrimDodgeDuration;
+	ThorgrimPoseAccumulator = 1.0f;
 	LaunchCharacter(SafeDirection * 920.0f, true, false);
 	MulticastPlayDodgeVisual(SafeDirection);
 	FTimerHandle DodgeTimer;
@@ -795,12 +930,22 @@ void AEmberdeepCharacter::RequestAttack(bool bHeavyAttack)
 
 void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& AttackDirection)
 {
-	if (!HasAuthority() || IsDead() || GetWorld()->GetTimeSeconds() < NextAttackTime)
+	if (!HasAuthority() || IsDead())
 	{
 		return;
 	}
 
 	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < NextAttackTime)
+	{
+		if (!bHeavyAttack)
+		{
+			bBasicAttackQueued = true;
+			QueuedBasicAttackDirection = AttackDirection.GetSafeNormal2D();
+		}
+		return;
+	}
+
 	int32 ComboStep = INDEX_NONE;
 	if (bHeavyAttack)
 	{
@@ -829,6 +974,10 @@ void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& Attack
 		return;
 	}
 
+	if (!bHeavyAttack)
+	{
+		bBasicAttackQueued = false;
+	}
 	NextAttackTime = Now + Cooldown;
 	ReplicatedAimDirection = SafeAttackDirection;
 	SetActorRotation(SafeAttackDirection.Rotation());
@@ -873,6 +1022,11 @@ void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack, int32 HitCount, in
 {
 	const bool bComboFinisher = !bHeavyAttack && ComboStep == 2;
 	const float SwingDuration = bHeavyAttack ? 0.34f : bComboFinisher ? 0.28f : 0.22f;
+	if (!bHeavyAttack)
+	{
+		BasicAttackCooldownVisualEndTime = GetWorld()->GetTimeSeconds() + GetBasicAttackInterval();
+		BasicAttackFeedbackStartTime = GetWorld()->GetTimeSeconds();
+	}
 	VisualAttackStartTime = GetWorld()->GetTimeSeconds();
 	VisualAttackDuration = SwingDuration;
 	bVisualHeavyAttack = bHeavyAttack;
@@ -891,8 +1045,231 @@ void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack, int32 HitCount, in
 	{
 		StartLocalCameraShake(bHeavyAttack ? 8.5f : 4.5f, bHeavyAttack ? 0.19f : 0.11f);
 	}
+	bThorgrimHeavyAttack = bHeavyAttack;
+	ThorgrimAttackDuration = SwingDuration;
+	ThorgrimAttackTimeRemaining = SwingDuration;
+	ThorgrimPoseAccumulator = 1.0f;
 	FTimerHandle VisualTimer;
 	GetWorldTimerManager().SetTimer(VisualTimer, this, &AEmberdeepCharacter::ResetAttackVisual, SwingDuration, false);
+}
+
+void AEmberdeepCharacter::UpdateThorgrimAnimation(float DeltaSeconds)
+{
+	static constexpr float PoseUpdateRate = 24.0f;
+	static constexpr float PoseInterval = 1.0f / PoseUpdateRate;
+	ThorgrimAnimationTime += DeltaSeconds;
+	ThorgrimPoseAccumulator += DeltaSeconds;
+	ThorgrimAttackTimeRemaining = FMath::Max(0.0f, ThorgrimAttackTimeRemaining - DeltaSeconds);
+	ThorgrimDodgeTimeRemaining = FMath::Max(0.0f, ThorgrimDodgeTimeRemaining - DeltaSeconds);
+	if (ThorgrimPoseAccumulator < PoseInterval)
+	{
+		return;
+	}
+	ThorgrimPoseAccumulator = FMath::Fmod(ThorgrimPoseAccumulator, PoseInterval);
+
+	const float Speed = GetVelocity().Size2D();
+	const bool bMoving = Speed > 12.0f && !IsDead();
+	const float CycleRate = bMoving ? FMath::GetMappedRangeValueClamped(
+		FVector2D(0.0f, GetCharacterMovement()->MaxWalkSpeed),
+		FVector2D(5.5f, 9.0f),
+		Speed) : 1.65f;
+	const float Cycle = ThorgrimAnimationTime * CycleRate;
+	const float Step = FMath::Sin(Cycle);
+	const float Breath = FMath::Sin(ThorgrimAnimationTime * 1.65f);
+	const bool bAttacking = ThorgrimAttackTimeRemaining > 0.0f
+		&& ThorgrimAttackDuration > KINDA_SMALL_NUMBER;
+	const float AttackAlpha = bAttacking
+		? FMath::Clamp(1.0f - ThorgrimAttackTimeRemaining / ThorgrimAttackDuration, 0.0f, 1.0f)
+		: 0.0f;
+	const auto SmoothStep = [](float Alpha)
+	{
+		const float ClampedAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+		return ClampedAlpha * ClampedAlpha * (3.0f - 2.0f * ClampedAlpha);
+	};
+	const auto LerpRotator = [](const FRotator& Start, const FRotator& End, float Alpha)
+	{
+		return FRotator(
+			FMath::Lerp(Start.Pitch, End.Pitch, Alpha),
+			FMath::Lerp(Start.Yaw, End.Yaw, Alpha),
+			FMath::Lerp(Start.Roll, End.Roll, Alpha));
+	};
+	// The strike travels forward and inward across Thorgrim's body at roughly
+	// 45 degrees, then reserves almost half the animation for pulling back to guard.
+	const float WindUpAlpha = SmoothStep(AttackAlpha / 0.20f);
+	const float SlashAlpha = SmoothStep((AttackAlpha - 0.20f) / 0.35f);
+	const float RecoveryAlpha = SmoothStep((AttackAlpha - 0.55f) / 0.45f);
+	const float AttackCommit = !bAttacking ? 0.0f
+		: AttackAlpha < 0.20f ? -0.25f * WindUpAlpha
+		: AttackAlpha < 0.55f ? FMath::Lerp(-0.25f, 1.0f, SlashAlpha)
+		: 1.0f - RecoveryAlpha;
+	const float AttackHold = !bAttacking ? 0.0f
+		: AttackAlpha < 0.20f ? WindUpAlpha
+		: AttackAlpha < 0.55f ? 1.0f
+		: 1.0f - RecoveryAlpha;
+
+	const FRotator ArmWindUp(-28.0f, 12.0f, 9.0f);
+	const FRotator ArmFollowThrough(
+		bThorgrimHeavyAttack ? 56.0f : 48.0f,
+		bThorgrimHeavyAttack ? -38.0f : -34.0f,
+		bThorgrimHeavyAttack ? -22.0f : -18.0f);
+	const FRotator AttackArmRotation = !bAttacking ? FRotator::ZeroRotator
+		: AttackAlpha < 0.20f ? LerpRotator(FRotator::ZeroRotator, ArmWindUp, WindUpAlpha)
+		: AttackAlpha < 0.55f ? LerpRotator(ArmWindUp, ArmFollowThrough, SlashAlpha)
+		: LerpRotator(ArmFollowThrough, FRotator::ZeroRotator, RecoveryAlpha);
+
+	const FRotator AxeWindUp(-27.0f, 14.0f, 15.0f);
+	const FRotator AxeFollowThrough(
+		bThorgrimHeavyAttack ? 86.0f : 72.0f,
+		bThorgrimHeavyAttack ? -36.0f : -31.0f,
+		bThorgrimHeavyAttack ? -46.0f : -40.0f);
+	const FRotator AxeSlashRotation = !bAttacking ? FRotator::ZeroRotator
+		: AttackAlpha < 0.20f ? LerpRotator(FRotator::ZeroRotator, AxeWindUp, WindUpAlpha)
+		: AttackAlpha < 0.55f ? LerpRotator(AxeWindUp, AxeFollowThrough, SlashAlpha)
+		: LerpRotator(AxeFollowThrough, FRotator::ZeroRotator, RecoveryAlpha);
+
+	FRotator BoneRotations[static_cast<int32>(EThorgrimRigidBone::Count)] = {};
+	FVector BoneTranslations[static_cast<int32>(EThorgrimRigidBone::Count)] = {};
+	const float WalkSwing = bMoving ? Step : 0.0f;
+	BoneRotations[static_cast<int32>(EThorgrimRigidBone::Head)] =
+		FRotator(0.0f, bMoving ? WalkSwing * 1.5f : Breath * 2.0f, 0.0f);
+	BoneRotations[static_cast<int32>(EThorgrimRigidBone::LeftArm)] =
+		FRotator(WalkSwing * 11.0f, 0.0f, 0.0f);
+	BoneRotations[static_cast<int32>(EThorgrimRigidBone::RightArm)] =
+		FRotator(-WalkSwing * 11.0f, 0.0f, 0.0f) + AttackArmRotation;
+	BoneTranslations[static_cast<int32>(EThorgrimRigidBone::RightArm)] =
+		FVector(1.0f, -1.0f, -0.25f).GetSafeNormal()
+		* AttackCommit
+		* (bThorgrimHeavyAttack ? 11.0f : 8.0f);
+	BoneRotations[static_cast<int32>(EThorgrimRigidBone::LeftLeg)] =
+		FRotator(-WalkSwing * 18.0f, 0.0f, 0.0f);
+	BoneRotations[static_cast<int32>(EThorgrimRigidBone::RightLeg)] =
+		FRotator(WalkSwing * 18.0f, 0.0f, 0.0f);
+
+	FVector BodyTranslation(0.0f, 0.0f, bMoving ? FMath::Abs(Step) * 1.8f : Breath * 0.65f);
+	FRotator BodyRotation(
+		AttackCommit * (bThorgrimHeavyAttack ? -7.0f : -5.0f),
+		AttackCommit * (bThorgrimHeavyAttack ? 3.0f : 2.0f),
+		bMoving ? Step * 1.4f : Breath * 0.35f);
+	FQuat AxeAnimationQuat = AxeSlashRotation.Quaternion();
+	FVector AxeAnimationTranslation = FVector::ZeroVector;
+	FQuat ShieldAnimationQuat = FRotator(WalkSwing * 2.0f, -AttackHold * 8.0f, -AttackHold * 7.0f).Quaternion();
+	FVector ShieldAnimationTranslation = FVector::ZeroVector;
+
+	if (!bUsingThorgrimVisual)
+	{
+		int32 ClipIndex = FighterVoxelData::GPlayableIdleClipIndex;
+		float ClipTime = FMath::Fmod(ThorgrimAnimationTime, FighterVoxelData::GPlayableAnimationClips[ClipIndex].Duration);
+		if (ThorgrimDodgeTimeRemaining > 0.0f && ThorgrimDodgeDuration > KINDA_SMALL_NUMBER)
+		{
+			ClipIndex = FighterVoxelData::GPlayableDodgeClipIndex;
+			ClipTime = (1.0f - ThorgrimDodgeTimeRemaining / ThorgrimDodgeDuration)
+				* FighterVoxelData::GPlayableAnimationClips[ClipIndex].Duration;
+		}
+		else if (bAttacking)
+		{
+			ClipIndex = bThorgrimHeavyAttack
+				? FighterVoxelData::GPlayableHeavyAttackClipIndex
+				: FighterVoxelData::GPlayableBasicAttackClipIndex;
+			ClipTime = AttackAlpha * FighterVoxelData::GPlayableAnimationClips[ClipIndex].Duration;
+		}
+		else if (bMoving)
+		{
+			ClipIndex = FighterVoxelData::GPlayableWalkClipIndex;
+			const float SpeedScale = FMath::GetMappedRangeValueClamped(
+				FVector2D(0.0f, GetCharacterMovement()->MaxWalkSpeed), FVector2D(0.65f, 1.5f), Speed);
+			ClipTime = FMath::Fmod(
+				ThorgrimAnimationTime * SpeedScale,
+				FighterVoxelData::GPlayableAnimationClips[ClipIndex].Duration);
+		}
+
+		const FPlayableVoxelAnimationClip& Clip = FighterVoxelData::GPlayableAnimationClips[ClipIndex];
+		const int32 FrameIndex = FMath::Clamp(
+			FMath::FloorToInt(ClipTime * Clip.SamplesPerSecond), 0, Clip.FrameCount - 1);
+		const FPlayableVoxelBonePose* Poses = Clip.Frames + FrameIndex * GPlayableAnimationBoneCount;
+		BodyRotation = Poses[0].Rotation.Rotator();
+		BodyTranslation = Poses[0].Translation;
+		for (int32 BoneIndex = 1; BoneIndex < static_cast<int32>(EThorgrimRigidBone::Count); ++BoneIndex)
+		{
+			BoneRotations[BoneIndex] = Poses[BoneIndex].Rotation.Rotator();
+			BoneTranslations[BoneIndex] = Poses[BoneIndex].Translation;
+		}
+		AxeAnimationQuat = Poses[6].Rotation;
+		AxeAnimationTranslation = Poses[6].Translation;
+		ShieldAnimationQuat = Poses[7].Rotation;
+		ShieldAnimationTranslation = Poses[7].Translation;
+	}
+	const FQuat BodyQuat = BodyRotation.Quaternion();
+	const FVector BodyPivot(4.0f, 0.0f, -4.0f);
+
+	const int32 BodyMeshCount = UE_ARRAY_COUNT(GThorgrimPaletteDefinitions) * EmberdeepVoxelStyle::ShadeCount;
+	for (int32 MeshIndex = 0; MeshIndex < BodyMeshCount; ++MeshIndex)
+	{
+		if (!ThorgrimPaletteMeshes.IsValidIndex(MeshIndex)
+			|| !ThorgrimRestTransformsByMesh.IsValidIndex(MeshIndex)
+			|| !ThorgrimRigidBonesByMesh.IsValidIndex(MeshIndex))
+		{
+			continue;
+		}
+
+		const TArray<FTransform>& RestTransforms = ThorgrimRestTransformsByMesh[MeshIndex];
+		const TArray<uint8>& RigidBones = ThorgrimRigidBonesByMesh[MeshIndex];
+		TArray<FTransform> AnimatedTransforms;
+		AnimatedTransforms.Reserve(RestTransforms.Num());
+		for (int32 InstanceIndex = 0; InstanceIndex < RestTransforms.Num(); ++InstanceIndex)
+		{
+			const FTransform& RestTransform = RestTransforms[InstanceIndex];
+			const EThorgrimRigidBone Bone = RigidBones.IsValidIndex(InstanceIndex)
+				? static_cast<EThorgrimRigidBone>(RigidBones[InstanceIndex])
+				: EThorgrimRigidBone::Torso;
+			const int32 BoneIndex = static_cast<int32>(Bone);
+			const FQuat BoneQuat = BoneRotations[BoneIndex].Quaternion();
+			const FVector BonePivot = GetThorgrimBonePivot(Bone);
+			FVector AnimatedLocation = BonePivot
+				+ BoneQuat.RotateVector(RestTransform.GetLocation() - BonePivot)
+				+ BoneTranslations[BoneIndex];
+			AnimatedLocation = BodyPivot + BodyQuat.RotateVector(AnimatedLocation - BodyPivot) + BodyTranslation;
+			AnimatedTransforms.Emplace(
+				BodyQuat * BoneQuat * RestTransform.GetRotation(),
+				AnimatedLocation,
+				RestTransform.GetScale3D());
+		}
+		ThorgrimPaletteMeshes[MeshIndex]->BatchUpdateInstancesTransforms(
+			0,
+			AnimatedTransforms,
+			false,
+			true,
+			true);
+	}
+
+	const int32 RightArmIndex = static_cast<int32>(EThorgrimRigidBone::RightArm);
+	const int32 LeftArmIndex = static_cast<int32>(EThorgrimRigidBone::LeftArm);
+	const FVector RightArmPivot = GetThorgrimBonePivot(EThorgrimRigidBone::RightArm);
+	const FVector LeftArmPivot = GetThorgrimBonePivot(EThorgrimRigidBone::LeftArm);
+	const FQuat RightArmQuat = BoneRotations[RightArmIndex].Quaternion();
+	const FQuat LeftArmQuat = BoneRotations[LeftArmIndex].Quaternion();
+	FVector AxeLocation = RightArmPivot
+		+ RightArmQuat.RotateVector(PlayableAxePivot - RightArmPivot)
+		+ BoneTranslations[RightArmIndex]
+		+ RightArmQuat.RotateVector(AxeAnimationTranslation);
+	FVector ShieldLocation = LeftArmPivot
+		+ LeftArmQuat.RotateVector(PlayableShieldPivot - LeftArmPivot)
+		+ BoneTranslations[LeftArmIndex]
+		+ LeftArmQuat.RotateVector(ShieldAnimationTranslation);
+	AxeLocation = BodyPivot + BodyQuat.RotateVector(AxeLocation - BodyPivot) + BodyTranslation;
+	ShieldLocation = BodyPivot + BodyQuat.RotateVector(ShieldLocation - BodyPivot) + BodyTranslation;
+
+	ThorgrimAxeRoot->SetRelativeLocation(AxeLocation);
+	ThorgrimAxeRoot->SetRelativeRotation((
+		BodyQuat
+		* RightArmQuat
+		* AxeAnimationQuat
+		* ThorgrimAxeRestingRotation.Quaternion()).Rotator());
+	ThorgrimShieldRoot->SetRelativeLocation(ShieldLocation);
+	ThorgrimShieldRoot->SetRelativeRotation((
+		BodyQuat
+		* LeftArmQuat
+		* ShieldAnimationQuat
+		* ThorgrimShieldRestingRotation.Quaternion()).Rotator());
 }
 
 void AEmberdeepCharacter::ServerSetAimDirection_Implementation(FVector_NetQuantizeNormal NewAimDirection)
@@ -912,7 +1289,21 @@ void AEmberdeepCharacter::ServerPerformAttack_Implementation(
 	ExecuteAttack(bHeavyAttack, FVector(RequestedAimDirection));
 }
 
-void AEmberdeepCharacter::MulticastPlayAttackVisual_Implementation(bool bHeavyAttack, int32 HitCount, int32 ComboStep)
+void AEmberdeepCharacter::ServerSetBasicAttackHeld_Implementation(
+	bool bHeld,
+	FVector_NetQuantizeNormal RequestedAimDirection)
+{
+	bBasicAttackHeld = bHeld;
+	if (bHeld)
+	{
+		ExecuteAttack(false, FVector(RequestedAimDirection));
+	}
+}
+
+void AEmberdeepCharacter::MulticastPlayAttackVisual_Implementation(
+	bool bHeavyAttack,
+	int32 HitCount,
+	int32 ComboStep)
 {
 	PlayAttackVisual(bHeavyAttack, HitCount, ComboStep);
 }
@@ -943,6 +1334,12 @@ void AEmberdeepCharacter::ResetAttackVisual()
 	VisualAttackStartTime = -100.0f;
 	VisualAttackDuration = 0.0f;
 	ApplySteppedVisualPose(true);
+	ThorgrimAttackTimeRemaining = 0.0f;
+	ThorgrimAttackDuration = 0.0f;
+	ThorgrimAxeRoot->SetRelativeLocation(PlayableAxePivot);
+	ThorgrimAxeRoot->SetRelativeRotation(ThorgrimAxeRestingRotation);
+	ThorgrimShieldRoot->SetRelativeLocation(PlayableShieldPivot);
+	ThorgrimShieldRoot->SetRelativeRotation(ThorgrimShieldRestingRotation);
 }
 
 void AEmberdeepCharacter::EndDodge()
@@ -1112,10 +1509,23 @@ void AEmberdeepCharacter::ApplyEquipmentStats()
 	}
 	if (AEmberdeepPlayerState* RunState = GetPlayerState<AEmberdeepPlayerState>())
 	{
+		const FEmberdeepItemInstance* Weapon = RunState->GetEquippedItem(EEmberdeepItemSlot::Weapon);
+		const FName DesiredWeaponVisual = Weapon ? Weapon->DefinitionId : FName(TEXT("NotchedIronAxe"));
+		if (EquippedWeaponVisualId != DesiredWeaponVisual)
+		{
+			EquippedWeaponVisualId = DesiredWeaponVisual;
+			RebuildPlayableVoxelCharacter(bUsingThorgrimVisual);
+			ForceNetUpdate();
+		}
 		HealthComponent->SetMaxHealth(190.0f + RunState->GetTotalMaxHealthBonus(), true);
 		UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_EQUIPMENT Applied Damage=%.1f Health=%.1f Armor=%.1f"),
 			RunState->GetTotalDamageBonus(), RunState->GetTotalMaxHealthBonus(), RunState->GetTotalArmorBonus());
 	}
+}
+
+void AEmberdeepCharacter::OnRep_EquippedWeaponVisual()
+{
+	RebuildPlayableVoxelCharacter(bUsingThorgrimVisual);
 }
 
 float AEmberdeepCharacter::GetDodgeCooldownNormalized() const
@@ -1128,6 +1538,49 @@ float AEmberdeepCharacter::GetDodgeCooldownNormalized() const
 	return 1.0f - FMath::Clamp((NextDodgeTime - GetWorld()->GetTimeSeconds()) / DodgeCooldown, 0.0f, 1.0f);
 }
 
+float AEmberdeepCharacter::GetBasicAttackCooldownNormalized() const
+{
+	const float BasicAttackInterval = GetBasicAttackInterval();
+	if (!GetWorld() || BasicAttackInterval <= 0.0f)
+	{
+		return 1.0f;
+	}
+
+	return 1.0f - FMath::Clamp(
+		(BasicAttackCooldownVisualEndTime - GetWorld()->GetTimeSeconds()) / BasicAttackInterval,
+		0.0f,
+		1.0f);
+}
+
+float AEmberdeepCharacter::GetBasicAttacksPerSecond() const
+{
+	return BasicAttackCooldown > KINDA_SMALL_NUMBER ? 1.0f / BasicAttackCooldown : 0.0f;
+}
+
+bool AEmberdeepCharacter::IsBasicAttackQueued() const
+{
+	return bBasicAttackQueued || bBasicAttackHeld;
+}
+
+float AEmberdeepCharacter::GetBasicAttackInterval() const
+{
+	return FMath::Max(BasicAttackCooldown, KINDA_SMALL_NUMBER);
+}
+
+float AEmberdeepCharacter::GetBasicAttackFeedbackNormalized() const
+{
+	if (!GetWorld() || BasicAttackFeedbackStartTime < 0.0f)
+	{
+		return 0.0f;
+	}
+
+	static constexpr float FeedbackDuration = 0.14f;
+	return 1.0f - FMath::Clamp(
+		(GetWorld()->GetTimeSeconds() - BasicAttackFeedbackStartTime) / FeedbackDuration,
+		0.0f,
+		1.0f);
+}
+
 bool AEmberdeepCharacter::IsDead() const
 {
 	return HealthComponent && HealthComponent->IsDead();
@@ -1138,6 +1591,8 @@ void AEmberdeepCharacter::HandleDeath()
 	bVisualDead = true;
 	VisualDeathStartTime = GetWorld()->GetTimeSeconds();
 	ApplySteppedVisualPose(true);
+	bBasicAttackHeld = false;
+	bBasicAttackQueued = false;
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	if (HasAuthority())
@@ -1153,4 +1608,5 @@ void AEmberdeepCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AEmberdeepCharacter, ReplicatedAimDirection);
+	DOREPLIFETIME(AEmberdeepCharacter, EquippedWeaponVisualId);
 }

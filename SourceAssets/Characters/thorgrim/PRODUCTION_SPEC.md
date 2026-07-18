@@ -53,6 +53,8 @@ The v0 wearable parts may be combined into one skeletal body, but the axe and sh
 
 ## Animation priorities
 
+The v0 runtime proof currently covers guard idle, heavy locomotion, and the axe-cleave timing with six procedural rigid voxel zones. It is a readability and timing prototype; the remaining actions and clean anatomical grouping belong to the authored skeletal conversion.
+
 1. Guard idle.
 2. Heavy run.
 3. Outside-in axe cleave.

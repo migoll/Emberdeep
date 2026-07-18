@@ -4,6 +4,7 @@
 #include "Components/PointLightComponent.h"
 #include "Components/PostProcessComponent.h"
 #include "Components/SceneComponent.h"
+#include "CanvasItem.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Texture2D.h"
@@ -515,6 +516,30 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 				IconWidth,
 				IconHeight * CooldownRemaining);
 		}
+		else if (SlotIndex == 0)
+		{
+			const float CooldownRemaining = 1.0f - Character->GetBasicAttackCooldownNormalized();
+			DrawRadialCooldown(
+				FVector2D(IconX + IconWidth * 0.5f, IconY + IconHeight * 0.5f),
+				FVector2D(IconWidth * 0.5f, IconHeight * 0.5f),
+				CooldownRemaining);
+
+			const float Feedback = Character->GetBasicAttackFeedbackNormalized();
+			const bool bQueued = Character->IsBasicAttackQueued() && CooldownRemaining > 0.0f;
+			if (Feedback > 0.0f || bQueued)
+			{
+				const float Border = FMath::Max(2.0f, 7.0f * Scale);
+				const FLinearColor FlashColor(
+					1.0f,
+					0.62f,
+					0.12f,
+					bQueued ? FMath::Max(0.72f, Feedback) : 0.35f + Feedback * 0.65f);
+				DrawRect(FlashColor, IconX, IconY, IconWidth, Border);
+				DrawRect(FlashColor, IconX, IconY + IconHeight - Border, IconWidth, Border);
+				DrawRect(FlashColor, IconX, IconY, Border, IconHeight);
+				DrawRect(FlashColor, IconX + IconWidth - Border, IconY, Border, IconHeight);
+			}
+		}
 	}
 
 	if (ConnectedCombatHud)
@@ -656,6 +681,60 @@ void AEmberdeepHUD::DrawOrb(
 		{
 			DrawRect(FLinearColor(1.0f, 0.92f, 0.82f, 0.10f + GlintRow * 0.025f), GlintCenter.X - (4 - GlintRow) * 2.0f, GlintY, (8 - GlintRow * 2.0f) * 2.0f, 2.0f);
 		}
+	}
+}
+
+void AEmberdeepHUD::DrawRadialCooldown(
+	const FVector2D& Center,
+	const FVector2D& HalfSize,
+	float NormalizedRemaining)
+{
+	FTexture* CooldownTexture = Canvas && Canvas->DefaultTexture
+		? Canvas->DefaultTexture->GetResource()
+		: nullptr;
+	if (!CooldownTexture)
+	{
+		return;
+	}
+
+	const float Sweep = FMath::Clamp(NormalizedRemaining, 0.0f, 1.0f) * UE_TWO_PI;
+	if (Sweep <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	static constexpr int32 SegmentCount = 32;
+	static constexpr float StartAngle = -UE_HALF_PI;
+	static constexpr float SegmentAngle = UE_TWO_PI / static_cast<float>(SegmentCount);
+	const auto RectangleEdgePoint = [&Center, &HalfSize](float Angle)
+	{
+		const FVector2D Direction(FMath::Cos(Angle), FMath::Sin(Angle));
+		const float HorizontalDistance = FMath::Abs(Direction.X) > KINDA_SMALL_NUMBER
+			? HalfSize.X / FMath::Abs(Direction.X)
+			: MAX_flt;
+		const float VerticalDistance = FMath::Abs(Direction.Y) > KINDA_SMALL_NUMBER
+			? HalfSize.Y / FMath::Abs(Direction.Y)
+			: MAX_flt;
+		return Center + Direction * FMath::Min(HorizontalDistance, VerticalDistance);
+	};
+
+	for (int32 SegmentIndex = 0; SegmentIndex < SegmentCount; ++SegmentIndex)
+	{
+		const float SegmentStart = SegmentIndex * SegmentAngle;
+		if (SegmentStart >= Sweep)
+		{
+			break;
+		}
+
+		const float SegmentEnd = FMath::Min(SegmentStart + SegmentAngle, Sweep);
+		FCanvasTriangleItem Triangle(
+			Center,
+			RectangleEdgePoint(StartAngle + SegmentStart),
+			RectangleEdgePoint(StartAngle + SegmentEnd),
+			CooldownTexture);
+		Triangle.SetColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.72f));
+		Triangle.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(Triangle);
 	}
 }
 
