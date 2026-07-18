@@ -20,7 +20,8 @@ The current Phase 0A slice contains:
 - two skeletons and an elite Bone Warden with proximity aggro and a telegraphed slam;
 - health, death, automatic encounter restart, enemy hit flashes, and defeat feedback;
 - dropped gold pickups and victory tracking;
-- a placeholder combat HUD for player/enemy health, dodge recovery, gold, and enemy count;
+- a dark-fantasy HUD with dynamic party roster, minimap/objective panel, enemy health,
+  health/dodge orbs, action bar, cooldown state, and gold;
 - replicated-ready C++ health and gameplay foundations.
 
 ## Controls
