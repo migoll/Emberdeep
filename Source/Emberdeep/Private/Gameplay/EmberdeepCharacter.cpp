@@ -20,7 +20,6 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Net/UnrealNetwork.h"
-#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Visual/EmberdeepVoxelStyle.h"
@@ -299,21 +298,6 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 	HealthComponent = CreateDefaultSubobject<UEmberdeepHealthComponent>(TEXT("HealthComponent"));
 	HealthComponent->SetMaxHealth(190.0f);
 
-	static ConstructorHelpers::FObjectFinder<USoundBase> LightSwingAsset(
-		TEXT("/Game/Emberdeep/Audio/S_FighterSwingLight.S_FighterSwingLight"));
-	static ConstructorHelpers::FObjectFinder<USoundBase> HeavySwingAsset(
-		TEXT("/Game/Emberdeep/Audio/S_FighterSwingHeavy.S_FighterSwingHeavy"));
-	static ConstructorHelpers::FObjectFinder<USoundBase> HeavyImpactAsset(
-		TEXT("/Game/Emberdeep/Audio/S_HeavyImpact.S_HeavyImpact"));
-	static ConstructorHelpers::FObjectFinder<USoundBase> DodgeAsset(
-		TEXT("/Game/Emberdeep/Audio/S_Dodge.S_Dodge"));
-	static ConstructorHelpers::FObjectFinder<USoundBase> PlayerHurtAsset(
-		TEXT("/Game/Emberdeep/Audio/S_PlayerHurt.S_PlayerHurt"));
-	LightSwingSound = LightSwingAsset.Object;
-	HeavySwingSound = HeavySwingAsset.Object;
-	HeavyImpactSound = HeavyImpactAsset.Object;
-	DodgeSound = DodgeAsset.Object;
-	PlayerHurtSound = PlayerHurtAsset.Object;
 }
 
 void AEmberdeepCharacter::Tick(float DeltaSeconds)
@@ -646,24 +630,6 @@ void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack, int32 HitCount, in
 		Forward,
 		bHeavyAttack || bComboFinisher,
 		HitCount > 0);
-	if (GetNetMode() != NM_DedicatedServer)
-	{
-		USoundBase* SwingSound = bHeavyAttack ? HeavySwingSound : LightSwingSound;
-		if (SwingSound)
-		{
-			const float Pitch = bHeavyAttack ? 0.88f : 0.92f + FMath::Max(0, ComboStep) * 0.08f;
-			UGameplayStatics::PlaySoundAtLocation(this, SwingSound, GetActorLocation(), 0.72f, Pitch);
-		}
-		if (HitCount > 0 && (bHeavyAttack || bComboFinisher) && HeavyImpactSound)
-		{
-			UGameplayStatics::PlaySoundAtLocation(
-				this,
-				HeavyImpactSound,
-				GetActorLocation() + Forward * 110.0f,
-				0.82f,
-				bHeavyAttack ? 0.88f : 1.06f);
-		}
-	}
 	if (IsLocallyControlled() && HitCount > 0)
 	{
 		StartLocalCameraShake(bHeavyAttack ? 8.5f : 4.5f, bHeavyAttack ? 0.19f : 0.11f);
@@ -697,10 +663,6 @@ void AEmberdeepCharacter::MulticastPlayAttackVisual_Implementation(bool bHeavyAt
 void AEmberdeepCharacter::MulticastPlayDodgeVisual_Implementation(FVector_NetQuantizeNormal DodgeDirection)
 {
 	AEmberdeepCombatFeedback::SpawnDodge(GetWorld(), GetActorLocation(), FVector(DodgeDirection));
-	if (GetNetMode() != NM_DedicatedServer && DodgeSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, DodgeSound, GetActorLocation(), 0.62f, 1.0f);
-	}
 }
 
 void AEmberdeepCharacter::ServerDodge_Implementation(FVector_NetQuantizeNormal RequestedDodgeDirection)
@@ -763,15 +725,6 @@ void AEmberdeepCharacter::PlayHurtVisual(float Damage, bool bFatal)
 		}
 	}
 	AEmberdeepCombatFeedback::SpawnPlayerHurt(GetWorld(), GetActorLocation(), Damage, bFatal);
-	if (GetNetMode() != NM_DedicatedServer && PlayerHurtSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(
-			this,
-			PlayerHurtSound,
-			GetActorLocation(),
-			bFatal ? 0.92f : 0.64f,
-			bFatal ? 0.78f : 1.0f);
-	}
 	if (IsLocallyControlled())
 	{
 		StartLocalCameraShake(bFatal ? 13.0f : 7.0f, bFatal ? 0.30f : 0.16f);

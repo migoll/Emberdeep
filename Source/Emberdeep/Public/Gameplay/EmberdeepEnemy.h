@@ -8,7 +8,6 @@ class UEmberdeepHealthComponent;
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class UStaticMeshComponent;
-class USoundBase;
 
 UCLASS()
 class EMBERDEEP_API AEmberdeepEnemy : public ACharacter
@@ -53,15 +52,6 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UStaticMeshComponent> AttackTelegraph;
-
-	UPROPERTY()
-	TObjectPtr<USoundBase> BoneHitSound;
-
-	UPROPERTY()
-	TObjectPtr<USoundBase> EnemyWindupSound;
-
-	UPROPERTY()
-	TObjectPtr<USoundBase> EnemyDeathSound;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> BoneVoxelMeshes;

@@ -5,7 +5,7 @@
 #include "Gameplay/EmberdeepItemTypes.h"
 #include "EmberdeepLootWidget.generated.h"
 
-/** Multiplayer-safe corpse/chest loot window. This widget never pauses play. */
+/** Responsive multiplayer-safe corpse/chest loot window. This widget never pauses play. */
 UCLASS()
 class EMBERDEEP_API UEmberdeepLootWidget : public UUserWidget
 {
@@ -23,22 +23,15 @@ private:
 	void HandleTakeItem(int32 EntryId);
 	void EnterWindowInputMode();
 
-	UFUNCTION()
-	void TakeAll();
+	UFUNCTION() void TakeAll();
+	UFUNCTION() void CloseWindow();
 
-	UFUNCTION()
-	void CloseWindow();
-
-	UPROPERTY()
-	TObjectPtr<class UTextBlock> TitleText;
-
-	UPROPERTY()
-	TObjectPtr<class UTextBlock> EmptyText;
-
-	UPROPERTY()
-	TObjectPtr<class UVerticalBox> ItemRows;
+	UPROPERTY() TObjectPtr<class UTextBlock> TitleText;
+	UPROPERTY() TObjectPtr<class UTextBlock> EmptyText;
+	UPROPERTY() TObjectPtr<class UVerticalBox> ItemRows;
+	UPROPERTY() TObjectPtr<class UTexture2D> PanelTexture;
+	UPROPERTY() TObjectPtr<class UTexture2D> ItemIconAtlas;
 
 	FString CurrentTitle;
 	TArray<FEmberdeepItemInstance> CurrentItems;
 };
-

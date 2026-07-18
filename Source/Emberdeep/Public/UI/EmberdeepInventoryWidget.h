@@ -4,7 +4,7 @@
 #include "Blueprint/UserWidget.h"
 #include "EmberdeepInventoryWidget.generated.h"
 
-/** Compact equipment/inventory window. Equipping remains server-authoritative. */
+/** Responsive gothic equipment and inventory window. Equipping remains server-authoritative. */
 UCLASS()
 class EMBERDEEP_API UEmberdeepInventoryWidget : public UUserWidget
 {
@@ -25,16 +25,12 @@ private:
 	UFUNCTION()
 	void CloseWindow();
 
-	UPROPERTY()
-	TObjectPtr<class UVerticalBox> ItemRows;
-
-	UPROPERTY()
-	TObjectPtr<class UTextBlock> EmptyText;
-
-	UPROPERTY()
-	TObjectPtr<class UTextBlock> EquippedSummaryText;
-
-	UPROPERTY()
-	TObjectPtr<class UTextBlock> StatSummaryText;
+	UPROPERTY() TObjectPtr<class UUniformGridPanel> ItemRows;
+	UPROPERTY() TObjectPtr<class UTextBlock> EmptyText;
+	UPROPERTY() TObjectPtr<class UTextBlock> StatSummaryText;
+	UPROPERTY() TObjectPtr<class UImage> EquippedWeaponIcon;
+	UPROPERTY() TObjectPtr<class UImage> EquippedArmorIcon;
+	UPROPERTY() TObjectPtr<class UImage> EquippedTrinketIcon;
+	UPROPERTY() TObjectPtr<class UTexture2D> PanelTexture;
+	UPROPERTY() TObjectPtr<class UTexture2D> ItemIconAtlas;
 };
-

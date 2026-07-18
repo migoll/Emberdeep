@@ -9,7 +9,6 @@ class UEmberdeepHealthComponent;
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class USceneComponent;
-class USoundBase;
 class USpringArmComponent;
 
 UCLASS()
@@ -119,21 +118,6 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UEmberdeepHealthComponent> HealthComponent;
-
-	UPROPERTY()
-	TObjectPtr<USoundBase> LightSwingSound;
-
-	UPROPERTY()
-	TObjectPtr<USoundBase> HeavySwingSound;
-
-	UPROPERTY()
-	TObjectPtr<USoundBase> HeavyImpactSound;
-
-	UPROPERTY()
-	TObjectPtr<USoundBase> DodgeSound;
-
-	UPROPERTY()
-	TObjectPtr<USoundBase> PlayerHurtSound;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Combat")
 	float BasicAttackCooldown = 0.38f;
