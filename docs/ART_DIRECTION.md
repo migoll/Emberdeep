@@ -4,6 +4,11 @@
 
 Chunky low-poly dark fantasy with voxel-inspired geometry and pixel-art presentation, built in Unreal Engine.
 
+## Primary reference
+
+- Overall visual moodboard: `SourceAssets/References/moodboard_visual_direction.png`.
+- Use the moodboard for palette, lighting, atmosphere, silhouettes, UI tone, and gameplay-scale readability. More specific written decisions in this document take priority where a generated reference is inconsistent.
+
 ## Camera and presentation
 
 - Orthographic, near-isometric camera.
@@ -19,6 +24,14 @@ Chunky low-poly dark fantasy with voxel-inspired geometry and pixel-art presenta
 - Materials use restricted palettes and simple value bands.
 - Avoid noisy detailed PBR surfaces and generic realistic Marketplace appearances.
 
+## Character voxel density
+
+- Characters should read as deliberately built from voxels, not as conventional polygonal models with a pixelated surface treatment.
+- Use large voxel clusters for the body and major equipment, medium clusters for armour, hair, fur, and cloth, and small voxels only for faces, fasteners, and magical accents.
+- Preserve enough layered detail for helmets, shoulders, chest pieces, weapons, shields, cloaks, and upgraded gear to change the character visibly.
+- Judge detail from the normal gameplay camera. Close-up presentation may be denser, but tiny details that disappear during play should not drive the model.
+- Thorgrim is the current density benchmark: `SourceAssets/Characters/thorgrim/thorgrim_concept_primary.png`.
+
 ## Lighting and effects
 
 - Environment remains dark but navigable.
@@ -32,4 +45,3 @@ Chunky low-poly dark fantasy with voxel-inspired geometry and pixel-art presenta
 - Gameplay simulation remains responsive.
 - Visual animation may be stepped to approximately 10-12 poses per second where it improves the miniature/pixel impression.
 - Attacks use short anticipation, fast execution, and readable recovery.
-

@@ -1,0 +1,11 @@
+; Minimal headless project used only for deterministic Thorgrim interchange export.
+config_version=5
+
+[application]
+
+config/name="Thorgrim GLB Export"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

@@ -1,5 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Misc/AutomationTest.h"
 #include "Gameplay/EmberdeepCharacter.h"
 #include "Gameplay/EmberdeepEnemy.h"
@@ -20,6 +21,18 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 	TestNotNull(TEXT("The skeleton enemy must exist"), AEmberdeepEnemy::StaticClass());
 	TestNotNull(TEXT("The gold pickup must exist"), AEmberdeepGoldPickup::StaticClass());
 	TestNotNull(TEXT("The combat HUD must exist"), AEmberdeepHUD::StaticClass());
+
+	const AEmberdeepCharacter* CharacterDefault = AEmberdeepCharacter::StaticClass()->GetDefaultObject<AEmberdeepCharacter>();
+	TArray<UInstancedStaticMeshComponent*> ThorgrimPaletteMeshes;
+	CharacterDefault->GetComponents<UInstancedStaticMeshComponent>(ThorgrimPaletteMeshes);
+	TestEqual(TEXT("Thorgrim must provide body, axe, and shield palette groups"), ThorgrimPaletteMeshes.Num(), 27);
+
+	int32 ThorgrimInstanceCount = 0;
+	for (const UInstancedStaticMeshComponent* PaletteMesh : ThorgrimPaletteMeshes)
+	{
+		ThorgrimInstanceCount += PaletteMesh->GetInstanceCount();
+	}
+	TestTrue(TEXT("Thorgrim must retain the agreed voxel density"), ThorgrimInstanceCount >= 200);
 	return true;
 }
 

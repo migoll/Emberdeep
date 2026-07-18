@@ -8,13 +8,13 @@ The core loop is:
 
 ## Current phase
 
-Phase 0A proves one Fighter, one small dungeon arena, responsive combat, one skeleton foundation, and the intended visual treatment. Multiplayer begins only in Phase 0B, immediately after the combat proof succeeds.
+Phase 0A proves one Fighter, currently represented by Thorgrim the Beast-Slayer, one small dungeon arena, responsive combat, one skeleton foundation, and the intended visual treatment. Multiplayer begins only in Phase 0B, immediately after the combat proof succeeds.
 
 The current Phase 0A slice contains:
 
 - a generated blockout dungeon arena;
 - fixed orthographic near-isometric camera;
-- visible chunky placeholder Fighter;
+- playable code-instanced Thorgrim visual with a chunky voxel-built silhouette;
 - screen-relative WASD movement and invulnerable dodge;
 - basic and heavy melee attacks with cooldowns and knockback;
 - two skeletons and an elite Bone Warden with proximity aggro and a telegraphed slam;
@@ -35,6 +35,9 @@ The current Phase 0A slice contains:
 Designer handoff templates live in `SourceAssets/Characters/Fighter` and
 `SourceAssets/Environment/Campground`. Runtime imports belong under the matching
 `Content/Emberdeep` folders.
+
+Thorgrim's generated source model, portable exports, concept, and production notes
+live in `SourceAssets/Characters/thorgrim`.
 
 ## Setup
 

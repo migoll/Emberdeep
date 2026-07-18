@@ -6,8 +6,9 @@
 
 class UCameraComponent;
 class UEmberdeepHealthComponent;
+class UInstancedStaticMeshComponent;
+class USceneComponent;
 class USpringArmComponent;
-class UStaticMeshComponent;
 
 UCLASS()
 class EMBERDEEP_API AEmberdeepCharacter : public ACharacter
@@ -57,16 +58,13 @@ private:
 	TObjectPtr<UCameraComponent> IsometricCamera;
 
 	UPROPERTY(VisibleAnywhere, Category = "Visual")
-	TObjectPtr<UStaticMeshComponent> BodyBlock;
+	TObjectPtr<USceneComponent> ThorgrimAxeRoot;
 
 	UPROPERTY(VisibleAnywhere, Category = "Visual")
-	TObjectPtr<UStaticMeshComponent> HeadBlock;
+	TObjectPtr<USceneComponent> ThorgrimShieldRoot;
 
 	UPROPERTY(VisibleAnywhere, Category = "Visual")
-	TObjectPtr<UStaticMeshComponent> SwordBlock;
-
-	UPROPERTY(VisibleAnywhere, Category = "Visual")
-	TObjectPtr<UStaticMeshComponent> ShieldBlock;
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ThorgrimPaletteMeshes;
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UEmberdeepHealthComponent> HealthComponent;
@@ -86,7 +84,7 @@ private:
 	float NextAttackTime = 0.0f;
 	float NextDodgeTime = 0.0f;
 	bool bInvulnerable = false;
-	FRotator SwordRestingRotation;
+	FRotator ThorgrimAxeRestingRotation;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

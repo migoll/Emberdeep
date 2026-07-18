@@ -3,10 +3,12 @@
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/InputComponent.h"
-#include "Components/StaticMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Components/SceneComponent.h"
 #include "Emberdeep.h"
 #include "Engine/DamageEvents.h"
 #include "Engine/OverlapResult.h"
+#include "Engine/StaticMesh.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Gameplay/EmberdeepHealthComponent.h"
@@ -15,13 +17,85 @@
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
+namespace
+{
+	enum class EThorgrimPart : uint8
+	{
+		Body,
+		Axe,
+		Shield
+	};
+
+	enum class EThorgrimPalette : uint8
+	{
+		Night,
+		Steel,
+		Ash,
+		Bone,
+		Hide,
+		Fur,
+		Skin,
+		Wood,
+		Cloth
+	};
+
+	struct FThorgrimPartDefinition
+	{
+		EThorgrimPart Part;
+		const TCHAR* Name;
+	};
+
+	struct FThorgrimPaletteDefinition
+	{
+		EThorgrimPalette Palette;
+		const TCHAR* Name;
+		FLinearColor Color;
+	};
+
+	struct FThorgrimVoxelBlock
+	{
+		EThorgrimPart Part;
+		EThorgrimPalette Palette;
+		FVector Location;
+		FVector Size;
+		FRotator Rotation;
+	};
+
+	const FThorgrimPartDefinition GThorgrimPartDefinitions[] =
+	{
+		{ EThorgrimPart::Body, TEXT("Body") },
+		{ EThorgrimPart::Axe, TEXT("Axe") },
+		{ EThorgrimPart::Shield, TEXT("Shield") }
+	};
+
+	const FThorgrimPaletteDefinition GThorgrimPaletteDefinitions[] =
+	{
+		{ EThorgrimPalette::Night, TEXT("Night"), FLinearColor::FromSRGBColor(FColor(24, 32, 43)) },
+		{ EThorgrimPalette::Steel, TEXT("Steel"), FLinearColor::FromSRGBColor(FColor(85, 90, 96)) },
+		{ EThorgrimPalette::Ash, TEXT("Ash"), FLinearColor::FromSRGBColor(FColor(119, 117, 114)) },
+		{ EThorgrimPalette::Bone, TEXT("Bone"), FLinearColor::FromSRGBColor(FColor(210, 194, 162)) },
+		{ EThorgrimPalette::Hide, TEXT("Hide"), FLinearColor::FromSRGBColor(FColor(138, 95, 60)) },
+		{ EThorgrimPalette::Fur, TEXT("Fur"), FLinearColor::FromSRGBColor(FColor(73, 55, 45)) },
+		{ EThorgrimPalette::Skin, TEXT("Skin"), FLinearColor::FromSRGBColor(FColor(184, 116, 84)) },
+		{ EThorgrimPalette::Wood, TEXT("Wood"), FLinearColor::FromSRGBColor(FColor(78, 53, 37)) },
+		{ EThorgrimPalette::Cloth, TEXT("Cloth"), FLinearColor::FromSRGBColor(FColor(36, 52, 66)) }
+	};
+
+	int32 GetThorgrimMeshKey(EThorgrimPart Part, EThorgrimPalette Palette)
+	{
+		return static_cast<int32>(Part) * UE_ARRAY_COUNT(GThorgrimPaletteDefinitions) + static_cast<int32>(Palette);
+	}
+
+#include "ThorgrimVoxelData.inl"
+}
+
 AEmberdeepCharacter::AEmberdeepCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	bReplicates = true;
 	SetReplicateMovement(true);
 
-	GetCapsuleComponent()->InitCapsuleSize(34.0f, 72.0f);
+	GetCapsuleComponent()->InitCapsuleSize(42.0f, 80.0f);
 	GetCharacterMovement()->MaxWalkSpeed = 500.0f;
 	GetCharacterMovement()->BrakingDecelerationWalking = 2200.0f;
 	GetCharacterMovement()->GroundFriction = 9.0f;
@@ -53,34 +127,53 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 
-	BodyBlock = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BodyBlock"));
-	BodyBlock->SetupAttachment(RootComponent);
-	BodyBlock->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	BodyBlock->SetRelativeLocation(FVector(0.0f, 0.0f, 5.0f));
-	BodyBlock->SetRelativeScale3D(FVector(0.55f, 0.40f, 0.85f));
-	BodyBlock->SetStaticMesh(CubeMesh.Object);
+	ThorgrimAxeRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ThorgrimAxeRoot"));
+	ThorgrimAxeRoot->SetupAttachment(RootComponent);
+	ThorgrimAxeRoot->SetRelativeLocation(GThorgrimAxePivot);
 
-	HeadBlock = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeadBlock"));
-	HeadBlock->SetupAttachment(RootComponent);
-	HeadBlock->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	HeadBlock->SetRelativeLocation(FVector(0.0f, 0.0f, 85.0f));
-	HeadBlock->SetRelativeScale3D(FVector(0.46f, 0.46f, 0.46f));
-	HeadBlock->SetStaticMesh(CubeMesh.Object);
+	ThorgrimShieldRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ThorgrimShieldRoot"));
+	ThorgrimShieldRoot->SetupAttachment(RootComponent);
+	ThorgrimShieldRoot->SetRelativeLocation(GThorgrimShieldPivot);
 
-	SwordBlock = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SwordBlock"));
-	SwordBlock->SetupAttachment(RootComponent);
-	SwordBlock->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	SwordBlock->SetRelativeLocation(FVector(12.0f, 48.0f, 8.0f));
-	SwordBlock->SetRelativeRotation(FRotator(0.0f, 0.0f, -28.0f));
-	SwordBlock->SetRelativeScale3D(FVector(0.11f, 0.11f, 0.95f));
-	SwordBlock->SetStaticMesh(CubeMesh.Object);
+	TMap<int32, UInstancedStaticMeshComponent*> PaletteMeshes;
+	for (const FThorgrimPartDefinition& PartDefinition : GThorgrimPartDefinitions)
+	{
+		USceneComponent* PartRoot = RootComponent;
+		if (PartDefinition.Part == EThorgrimPart::Axe)
+		{
+			PartRoot = ThorgrimAxeRoot;
+		}
+		else if (PartDefinition.Part == EThorgrimPart::Shield)
+		{
+			PartRoot = ThorgrimShieldRoot;
+		}
 
-	ShieldBlock = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ShieldBlock"));
-	ShieldBlock->SetupAttachment(RootComponent);
-	ShieldBlock->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	ShieldBlock->SetRelativeLocation(FVector(10.0f, -44.0f, 15.0f));
-	ShieldBlock->SetRelativeScale3D(FVector(0.16f, 0.52f, 0.62f));
-	ShieldBlock->SetStaticMesh(CubeMesh.Object);
+		for (const FThorgrimPaletteDefinition& PaletteDefinition : GThorgrimPaletteDefinitions)
+		{
+			const FName ComponentName(*FString::Printf(
+				TEXT("Thorgrim%s%s"),
+				PartDefinition.Name,
+				PaletteDefinition.Name));
+			UInstancedStaticMeshComponent* PaletteMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(ComponentName);
+			PaletteMesh->SetupAttachment(PartRoot);
+			PaletteMesh->SetMobility(EComponentMobility::Movable);
+			PaletteMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			PaletteMesh->SetGenerateOverlapEvents(false);
+			PaletteMesh->SetCanEverAffectNavigation(false);
+			PaletteMesh->SetStaticMesh(CubeMesh.Object);
+			ThorgrimPaletteMeshes.Add(PaletteMesh);
+			PaletteMeshes.Add(GetThorgrimMeshKey(PartDefinition.Part, PaletteDefinition.Palette), PaletteMesh);
+		}
+	}
+
+	for (const FThorgrimVoxelBlock& Block : GThorgrimVoxelBlocks)
+	{
+		if (UInstancedStaticMeshComponent* const* PaletteMesh = PaletteMeshes.Find(GetThorgrimMeshKey(Block.Part, Block.Palette)))
+		{
+			const FVector InstanceScale = Block.Size / 100.0f;
+			(*PaletteMesh)->AddInstance(FTransform(Block.Rotation, Block.Location, InstanceScale));
+		}
+	}
 
 	HealthComponent = CreateDefaultSubobject<UEmberdeepHealthComponent>(TEXT("HealthComponent"));
 	HealthComponent->SetMaxHealth(190.0f);
@@ -100,24 +193,28 @@ void AEmberdeepCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	const auto SetBlockColor = [](UStaticMeshComponent* BlockMesh, const FLinearColor& Color)
+	int32 ThorgrimInstanceCount = 0;
+	for (int32 MeshIndex = 0; MeshIndex < ThorgrimPaletteMeshes.Num(); ++MeshIndex)
 	{
-		if (UMaterialInstanceDynamic* Material = BlockMesh->CreateDynamicMaterialInstance(0))
+		UInstancedStaticMeshComponent* PaletteMesh = ThorgrimPaletteMeshes[MeshIndex];
+		if (PaletteMesh)
 		{
-			Material->SetVectorParameterValue(TEXT("Color"), Color);
+			ThorgrimInstanceCount += PaletteMesh->GetInstanceCount();
+			const int32 PaletteIndex = MeshIndex % UE_ARRAY_COUNT(GThorgrimPaletteDefinitions);
+			if (UMaterialInstanceDynamic* Material = PaletteMesh->CreateDynamicMaterialInstance(0))
+			{
+				Material->SetVectorParameterValue(TEXT("Color"), GThorgrimPaletteDefinitions[PaletteIndex].Color);
+			}
 		}
-	};
+	}
+	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_VISUAL ThorgrimGenerated Instances=%d"), ThorgrimInstanceCount);
 
-	SetBlockColor(BodyBlock, FLinearColor(0.30f, 0.055f, 0.035f));
-	SetBlockColor(HeadBlock, FLinearColor(0.42f, 0.30f, 0.20f));
-	SetBlockColor(SwordBlock, FLinearColor(0.52f, 0.60f, 0.68f));
-	SetBlockColor(ShieldBlock, FLinearColor(0.42f, 0.07f, 0.035f));
-	SwordRestingRotation = SwordBlock->GetRelativeRotation();
+	ThorgrimAxeRestingRotation = ThorgrimAxeRoot->GetRelativeRotation();
 	HealthComponent->OnDeath.AddUObject(this, &AEmberdeepCharacter::HandleDeath);
 
 	if (HasAuthority() && GetActorLocation().Z < 50.0f)
 	{
-		SetActorLocation(FVector(0.0f, 0.0f, 110.0f));
+		SetActorLocation(FVector(0.0f, 0.0f, 75.0f));
 	}
 }
 
@@ -227,7 +324,7 @@ void AEmberdeepCharacter::PerformAttack(
 	}
 
 	NextAttackTime = GetWorld()->GetTimeSeconds() + Cooldown;
-	SwordBlock->SetRelativeRotation(SwordRestingRotation + FRotator(0.0f, 0.0f, 85.0f));
+	ThorgrimAxeRoot->SetRelativeRotation(ThorgrimAxeRestingRotation + FRotator(0.0f, 0.0f, 85.0f));
 	FTimerHandle VisualTimer;
 	GetWorldTimerManager().SetTimer(VisualTimer, this, &AEmberdeepCharacter::ResetAttackVisual, 0.13f, false);
 
@@ -272,7 +369,7 @@ void AEmberdeepCharacter::PerformAttack(
 
 void AEmberdeepCharacter::ResetAttackVisual()
 {
-	SwordBlock->SetRelativeRotation(SwordRestingRotation);
+	ThorgrimAxeRoot->SetRelativeRotation(ThorgrimAxeRestingRotation);
 }
 
 void AEmberdeepCharacter::EndDodge()
