@@ -8,10 +8,12 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Visual/EmberdeepVoxelStyle.h"
 
 namespace
 {
 	#include "CampVoxelData.inl"
+	static_assert(GCampVoxelUnitCm == EmberdeepVoxelStyle::UnitCm);
 
 	struct FCampPaletteDefinition
 	{
@@ -66,40 +68,52 @@ AEmberdeepCampEnvironment::AEmberdeepCampEnvironment()
 
 	for (const FCampPaletteDefinition& PaletteDefinition : GCampPaletteDefinitions)
 	{
-		const FName ComponentName(*FString::Printf(TEXT("Camp%sInstances"), PaletteDefinition.Name));
-		UInstancedStaticMeshComponent* PaletteMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(ComponentName);
-		PaletteMesh->SetupAttachment(CampRoot);
-		PaletteMesh->SetMobility(EComponentMobility::Static);
-		PaletteMesh->SetStaticMesh(CubeAsset.Object);
-		PaletteMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		PaletteMesh->SetGenerateOverlapEvents(false);
-		PaletteMesh->SetCanEverAffectNavigation(false);
-		PaletteMeshes.Add(PaletteMesh);
-	}
-
-	TArray<TArray<FTransform>> InstanceTransformsByPalette;
-	InstanceTransformsByPalette.SetNum(PaletteMeshes.Num());
-	for (const FCampVoxelBlock& Block : GCampVoxelBlocks)
-	{
-		const int32 PaletteIndex = static_cast<int32>(Block.Palette);
-		if (InstanceTransformsByPalette.IsValidIndex(PaletteIndex))
+		for (int32 ShadeIndex = 0; ShadeIndex < EmberdeepVoxelStyle::ShadeCount; ++ShadeIndex)
 		{
-			InstanceTransformsByPalette[PaletteIndex].Add(FTransform(Block.Rotation, Block.Center, Block.Size / 100.0f));
+			const FName ComponentName(*FString::Printf(
+				TEXT("Camp%sShade%dInstances"),
+				PaletteDefinition.Name,
+				ShadeIndex));
+			UInstancedStaticMeshComponent* PaletteMesh =
+				CreateDefaultSubobject<UInstancedStaticMeshComponent>(ComponentName);
+			PaletteMesh->SetupAttachment(CampRoot);
+			PaletteMesh->SetMobility(EComponentMobility::Static);
+			PaletteMesh->SetStaticMesh(CubeAsset.Object);
+			PaletteMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			PaletteMesh->SetGenerateOverlapEvents(false);
+			PaletteMesh->SetCanEverAffectNavigation(false);
+			PaletteMeshes.Add(PaletteMesh);
 		}
 	}
 
-	// Keep the camera's off-camp view dark when it follows a character near the
-	// perimeter. This sits well below the playable floor and has no collision.
-	const int32 BackdropPaletteIndex = static_cast<int32>(ECampPalette::GroundDark);
-	if (InstanceTransformsByPalette.IsValidIndex(BackdropPaletteIndex))
+	TArray<TArray<FTransform>> InstanceTransformsByBatch;
+	InstanceTransformsByBatch.SetNum(PaletteMeshes.Num());
+	for (const FCampVoxelRect& Rectangle : GCampVoxelRects)
 	{
-		InstanceTransformsByPalette[BackdropPaletteIndex].Add(
-			FTransform(FRotator::ZeroRotator, FVector(0.0f, 0.0f, -105.0f), FVector(60.0f, 60.0f, 0.25f)));
+		const int32 PaletteIndex = static_cast<int32>(Rectangle.Palette);
+		for (int32 OffsetY = 0; OffsetY < Rectangle.SizeY; ++OffsetY)
+		{
+			for (int32 OffsetX = 0; OffsetX < Rectangle.SizeX; ++OffsetX)
+			{
+				const int32 X = Rectangle.X + OffsetX;
+				const int32 Y = Rectangle.Y + OffsetY;
+				const int32 Z = Rectangle.Z;
+				const int32 ShadeIndex = EmberdeepVoxelStyle::SelectShade(X, Y, Z, PaletteIndex);
+				const int32 BatchIndex = PaletteIndex * EmberdeepVoxelStyle::ShadeCount + ShadeIndex;
+				if (InstanceTransformsByBatch.IsValidIndex(BatchIndex))
+				{
+					InstanceTransformsByBatch[BatchIndex].Add(FTransform(
+						FQuat::Identity,
+						EmberdeepVoxelStyle::CellCenter(X, Y, Z),
+						EmberdeepVoxelStyle::InstanceScale()));
+				}
+			}
+		}
 	}
-	for (int32 PaletteIndex = 0; PaletteIndex < PaletteMeshes.Num(); ++PaletteIndex)
+	for (int32 BatchIndex = 0; BatchIndex < PaletteMeshes.Num(); ++BatchIndex)
 	{
-		PaletteMeshes[PaletteIndex]->AddInstances(
-			InstanceTransformsByPalette[PaletteIndex],
+		PaletteMeshes[BatchIndex]->AddInstances(
+			InstanceTransformsByBatch[BatchIndex],
 			false,
 			false,
 			false);
@@ -212,16 +226,20 @@ void AEmberdeepCampEnvironment::ApplyPaletteMaterials()
 		return;
 	}
 
-	for (int32 PaletteIndex = 0; PaletteIndex < PaletteMeshes.Num(); ++PaletteIndex)
+	for (int32 BatchIndex = 0; BatchIndex < PaletteMeshes.Num(); ++BatchIndex)
 	{
-		if (!PaletteMeshes[PaletteIndex])
+		if (!PaletteMeshes[BatchIndex])
 		{
 			continue;
 		}
 
+		const int32 ShadeIndex = BatchIndex % EmberdeepVoxelStyle::ShadeCount;
+		const int32 PaletteIndex = BatchIndex / EmberdeepVoxelStyle::ShadeCount;
 		UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(BaseBlockMaterial, this);
-		Material->SetVectorParameterValue(TEXT("Color"), GCampPaletteDefinitions[PaletteIndex].Color);
-		PaletteMeshes[PaletteIndex]->SetMaterial(0, Material);
+		Material->SetVectorParameterValue(
+			TEXT("Color"),
+			EmberdeepVoxelStyle::ShadeColor(GCampPaletteDefinitions[PaletteIndex].Color, ShadeIndex));
+		PaletteMeshes[BatchIndex]->SetMaterial(0, Material);
 	}
 }
 

@@ -5,7 +5,7 @@
 #include "EmberdeepGoldPickup.generated.h"
 
 class USphereComponent;
-class UStaticMeshComponent;
+class UInstancedStaticMeshComponent;
 
 UCLASS()
 class EMBERDEEP_API AEmberdeepGoldPickup : public AActor
@@ -35,7 +35,7 @@ private:
 	TObjectPtr<USphereComponent> PickupSphere;
 
 	UPROPERTY(VisibleAnywhere)
-	TObjectPtr<UStaticMeshComponent> GoldMesh;
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> GoldVoxelMeshes;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Loot")
 	int32 GoldValue = 5;

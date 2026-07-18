@@ -10,6 +10,8 @@
 
 - Author in Blender using metric units.
 - Unreal uses centimeters: 1 Unreal Unit equals 1 centimeter.
+- The project-wide fundamental voxel is 4 cm on every axis. Snap solid geometry to that lattice and never non-uniformly scale an individual cell.
+- Larger forms use repeated base cells. Animation may translate and rotate rigid cell clusters while preserving cell dimensions.
 - Apply transforms before export.
 - Place character origins at the feet on the ground plane.
 - Use stable skeleton and bone names after animation production begins.
@@ -19,6 +21,8 @@
 
 - Keep licensed source packs, provenance, and generator instructions together under the relevant `SourceAssets/Environment` folder.
 - Prefer deterministic generators and palette-batched instanced geometry for repeated voxel pieces.
+- Generators may rasterize conceptual cuboids and imported source modules to the shared 4 cm lattice. They may compress adjacent cells in checked-in data, but runtime rendering must expand them to uniform base-cell instances.
+- Use deterministic per-cell palette shades for material texture. Do not rely on stretched photographic or high-frequency PBR textures to define voxel surfaces.
 - Keep decorative geometry non-colliding. Author a small number of simple gameplay collision proxies separately.
 - Commit generated previews and runtime data so teammates do not need the original DCC tool to build or review the project.
 

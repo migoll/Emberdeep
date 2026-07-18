@@ -20,12 +20,14 @@ python SourceAssets/Environment/Campground/generate_camp.py --check
 The first command writes:
 
 - `broken_caravan_camp_v0_preview.png`, a deterministic nearest-neighbour art preview;
-- `Source/Emberdeep/Private/Environment/CampVoxelData.inl`, the runtime cuboid,
+- `Source/Emberdeep/Private/Environment/CampVoxelData.inl`, the compressed runtime cell,
   palette, light-anchor, and simple collision data.
 
 Use `--list-models` to inspect all 363 named source models. The generator parses
 MagicaVoxel v150 scene names (`nTRN`), remaps source colors to Emberdeep's restricted
-palette, and greedily merges adjacent same-palette voxels along X, Y, then Z.
+palette, rasterizes all visible solids onto Emberdeep's shared 4 cm lattice, and
+compresses adjacent cells into data rectangles. Unreal expands those rectangles to
+256,394 identical 4 cm cube instances; compression never changes their rendered size.
 
 ## Layout and palette
 
@@ -60,8 +62,9 @@ The composition currently uses these pack modules (some more than once):
 - 323 Fire Ring;
 - 334 Skinny Brown Tree.
 
-Custom generated cuboids add the paver ground, perimeter frost, covered-wagon
-canopy, canvas shelter, banners, lantern cores, and stylized flame. The primary visual reference is
+Custom source forms add the paver ground, perimeter frost, covered-wagon
+canopy, canvas shelter, banners, lantern cores, and stylized flame before fixed-grid
+rasterization. The primary visual reference is
 `broken_caravan_camp_concept.png` in this folder.
 
 ## Third-party provenance and license

@@ -1,10 +1,11 @@
 #include "Gameplay/EmberdeepGoldPickup.h"
 
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SphereComponent.h"
-#include "Components/StaticMeshComponent.h"
 #include "Gameplay/EmberdeepCharacter.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Visual/EmberdeepVoxelStyle.h"
 
 AEmberdeepGoldPickup::AEmberdeepGoldPickup()
 {
@@ -18,14 +19,44 @@ AEmberdeepGoldPickup::AEmberdeepGoldPickup()
 	PickupSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	PickupSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-	GoldMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("GoldMesh"));
-	GoldMesh->SetupAttachment(PickupSphere);
-	GoldMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	GoldMesh->SetRelativeScale3D(FVector(0.22f, 0.22f, 0.22f));
-	GoldMesh->SetRelativeRotation(FRotator(0.0f, 45.0f, 45.0f));
-
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	GoldMesh->SetStaticMesh(CubeMesh.Object);
+	for (int32 ShadeIndex = 0; ShadeIndex < EmberdeepVoxelStyle::ShadeCount; ++ShadeIndex)
+	{
+		const FName MeshName(*FString::Printf(TEXT("GoldVoxels_Shade%d"), ShadeIndex));
+		UInstancedStaticMeshComponent* GoldMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(MeshName);
+		GoldMesh->SetupAttachment(PickupSphere);
+		GoldMesh->SetStaticMesh(CubeMesh.Object);
+		GoldMesh->SetMobility(EComponentMobility::Movable);
+		GoldMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		GoldMesh->SetGenerateOverlapEvents(false);
+		GoldMesh->SetCanEverAffectNavigation(false);
+		GoldVoxelMeshes.Add(GoldMesh);
+	}
+
+	TArray<FTransform> ShadeTransforms[EmberdeepVoxelStyle::ShadeCount];
+	for (int32 Z = -2; Z <= 2; ++Z)
+	{
+		const int32 Radius = 3 - FMath::Abs(Z);
+		for (int32 Y = -Radius; Y <= Radius; ++Y)
+		{
+			for (int32 X = -Radius; X <= Radius; ++X)
+			{
+				if (FMath::Abs(X) + FMath::Abs(Y) > Radius + 1)
+				{
+					continue;
+				}
+				const int32 ShadeIndex = EmberdeepVoxelStyle::SelectShade(X, Y, Z, 73);
+				ShadeTransforms[ShadeIndex].Emplace(
+					FRotator::ZeroRotator,
+					EmberdeepVoxelStyle::CellCenter(X, Y, Z),
+					EmberdeepVoxelStyle::InstanceScale());
+			}
+		}
+	}
+	for (int32 ShadeIndex = 0; ShadeIndex < EmberdeepVoxelStyle::ShadeCount; ++ShadeIndex)
+	{
+		GoldVoxelMeshes[ShadeIndex]->AddInstances(ShadeTransforms[ShadeIndex], false, false, true);
+	}
 
 	PickupSphere->OnComponentBeginOverlap.AddDynamic(this, &AEmberdeepGoldPickup::HandleOverlap);
 	SetLifeSpan(30.0f);
@@ -36,9 +67,13 @@ void AEmberdeepGoldPickup::BeginPlay()
 	Super::BeginPlay();
 	BaseHeight = GetActorLocation().Z;
 
-	if (UMaterialInstanceDynamic* Material = GoldMesh->CreateDynamicMaterialInstance(0))
+	const FLinearColor GoldColor(0.95f, 0.48f, 0.035f);
+	for (int32 ShadeIndex = 0; ShadeIndex < GoldVoxelMeshes.Num(); ++ShadeIndex)
 	{
-		Material->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.95f, 0.48f, 0.035f));
+		if (UMaterialInstanceDynamic* Material = GoldVoxelMeshes[ShadeIndex]->CreateDynamicMaterialInstance(0))
+		{
+			Material->SetVectorParameterValue(TEXT("Color"), EmberdeepVoxelStyle::ShadeColor(GoldColor, ShadeIndex));
+		}
 	}
 }
 

@@ -10,13 +10,13 @@ Thorgrim is the first playable visual proof for Emberdeep's agreed character den
 - Overall moodboard: `../../References/moodboard_visual_direction.png`
 - Written direction: `../../../docs/ART_DIRECTION.md`
 
-The concept is interpreted rather than traced literally. Large clusters define the body and equipment, medium clusters define fur, armour, hair, and tusks, and very small blocks are restricted to the face and belt trophies.
+The concept is interpreted rather than traced literally. Every visible solid uses the project-wide 4 cm cell; large and medium forms are arrangements of those cells rather than differently sized cubes.
 
 ## Files
 
 - `generate_thorgrim.py`: editable procedural source of truth.
 - `thorgrim_v0_preview.png`: deterministic isometric preview.
-- `exports/thorgrim_v0.obj`: meter-scale, Z-up interchange mesh with named block objects.
+- `exports/thorgrim_v0.obj`: meter-scale, Z-up fixed-grid interchange mesh.
 - `exports/thorgrim_v0.mtl`: flat nine-colour material palette.
 - `exports/thorgrim_v0.glb`: static glTF 2.0 production candidate with embedded geometry and materials.
 - `godot/export_thorgrim.ps1`: one-command offline OBJ/MTL-to-GLB export and validation.
@@ -36,7 +36,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File SourceAssets/Characters/
 
 The wrapper accepts an optional `-GodotExecutable` path. Otherwise it resolves `godot` or `godot4` from `PATH`, then looks for a portable stable Windows console build under a local user Downloads folder. The headless exporter parses the current OBJ and MTL directly, converts Unreal's X-forward/Z-up authoring basis to the standard glTF basis, creates one indexed mesh with nine flat rough palette surfaces, writes the embedded GLB, and reads it back through Godot before running the structural validator.
 
-Current validated output:
+The checked-in GLB predates the fixed-grid conversion and remains a legacy preview until the offline exporter is rerun. The current OBJ and Unreal data are authoritative.
+
+Legacy GLB output:
 
 - Source: 213 named block objects, 1,704 vertices, and 1,278 quad faces.
 - GLB: glTF 2.0, one scene, two nodes, one static mesh, and nine embedded palette materials.
@@ -50,10 +52,11 @@ Current validated output:
 - Authoring origin: centred between the feet.
 - Target visual height: 165 cm.
 - Gameplay capsule: 42 cm radius, 80 cm half-height.
-- Runtime representation: 213 cube instances split across body, axe, and shield parts with nine flat palette materials.
+- Fundamental voxel: 4 cm, shared with all Emberdeep solid art.
+- Runtime representation: 8,746 visible fixed-size cube instances split across body, axe, and shield parts with nine palette families and three deterministic value shades.
 - Mesh and equipment collision: disabled; the character capsule remains authoritative.
 
-The runtime representation deliberately avoids one component per voxel. Part-and-palette batching creates 27 components, of which 18 currently contain geometry. Keeping the axe and shield on separate pivots preserves attack feedback now and leaves a clean path to replace either item later.
+The runtime representation deliberately avoids one component per voxel. Part, palette, and shade batching creates 81 instanced components. Keeping the axe and shield on separate 4 cm-snapped pivots preserves attack feedback now and leaves a clean path to replace either item later.
 
 ## Future skeletal conversion
 

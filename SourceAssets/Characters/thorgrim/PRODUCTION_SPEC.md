@@ -13,10 +13,11 @@ The v0 visual is 165 cm tall, with a core shoulder width near 85 cm and a fur-an
 
 ## Voxel hierarchy
 
-- 16-24 cm clusters: torso, limbs, boots, shield mass, and major armour volumes.
-- 8-16 cm clusters: fur, beard, hair, plates, tusks, and axe forms.
-- 4-8 cm accents: shield rim, belt skull, facial planes, and fasteners.
-- Details below 4 cm are exceptional and must remain under five percent of the visible model.
+- Fundamental cell: 4 x 4 x 4 cm for every solid part.
+- 16-24 cm arrangements: torso, limbs, boots, shield mass, and major armour volumes.
+- 8-16 cm arrangements: fur, beard, hair, plates, tusks, and axe forms.
+- Single-cell accents: shield rim, belt skull, facial planes, and fasteners.
+- Details below 4 cm are reserved for non-solid effects; they are not modeled as geometry.
 
 Curves are stepped constructions. Do not replace the tusks, shield, hair, or fur with smooth geometry carrying a pixel texture.
 

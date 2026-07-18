@@ -2,7 +2,7 @@
 
 ## Style sentence
 
-Chunky low-poly dark fantasy with voxel-inspired geometry and pixel-art presentation, built in Unreal Engine.
+Grid-authentic voxel dark fantasy with pixel-art presentation, built in Unreal Engine.
 
 ## Primary reference
 
@@ -20,23 +20,27 @@ Chunky low-poly dark fantasy with voxel-inspired geometry and pixel-art presenta
 
 ## Forms and materials
 
-- Use broad planes and deliberate block structure, not dense smooth geometry.
+- Every visible solid is authored on the same 4 cm base lattice. Character, equipment, prop, ground, and architecture cells are the same physical size.
+- Build broad planes and larger masses by repeating base cells. A visually larger block may occupy 2x2x2 cells, but it is never one stretched cube.
+- Runtime batching or source-data compression may combine cells internally only when the rendered result is indistinguishable from individual fixed-size cells.
+- Rigid voxel clusters may move and rotate during animation. Individual cells never shear or receive non-uniform scale.
+- Glows, particles, fog, and gameplay telegraphs are exempt because they are effects rather than solid forms.
 - Faces, hands, weapons, shields, and class-defining equipment are exaggerated.
-- Materials use restricted palettes and simple value bands.
+- Materials use restricted palettes and deterministic per-cell value bands. The cell-level variation supplies surface texture without bitmap detail being stretched over arbitrary forms.
 - Avoid noisy detailed PBR surfaces and generic realistic Marketplace appearances.
 
 ## Character voxel density
 
 - Characters should read as deliberately built from voxels, not as conventional polygonal models with a pixelated surface treatment.
-- Use large voxel clusters for the body and major equipment, medium clusters for armour, hair, fur, and cloth, and small voxels only for faces, fasteners, and magical accents.
+- Use large arrangements of the shared cells for the body and major equipment, medium arrangements for armour, hair, fur, and cloth, and individual cells only where facial or equipment readability needs them.
 - Preserve enough layered detail for helmets, shoulders, chest pieces, weapons, shields, cloaks, and upgraded gear to change the character visibly.
 - Judge detail from the normal gameplay camera. Close-up presentation may be denser, but tiny details that disappear during play should not drive the model.
 - Thorgrim is the current density benchmark: `SourceAssets/Characters/thorgrim/thorgrim_concept_primary.png`.
 
 ## Environment voxel density
 
-- Build ordinary scenery from reusable modular voxel pieces instead of unique fused meshes.
-- Keep ground, walls, and distant dressing coarser than characters. Spend smaller voxels on focal props such as the wagon, fire, shelter, and workstation.
+- Build ordinary scenery from reusable modular voxel-cell arrangements instead of unique arbitrary cuboids.
+- Ground, walls, and distant dressing may use simpler patterns and fewer silhouette changes than characters, but they retain the same 4 cm cell size. Spend more cell-level variation on focal props such as the wagon, fire, shelter, and workstation.
 - Preserve broad movement lanes and clear character silhouettes; environmental micro-detail that disappears at gameplay scale is not a production target.
 - The first playable benchmark is the generated Broken Caravan Camp under `SourceAssets/Environment/Campground`.
 

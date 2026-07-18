@@ -17,6 +17,7 @@
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Visual/EmberdeepVoxelStyle.h"
 
 namespace
 {
@@ -53,13 +54,13 @@ namespace
 		FLinearColor Color;
 	};
 
-	struct FThorgrimVoxelBlock
+	struct FThorgrimVoxelCell
 	{
 		EThorgrimPart Part;
 		EThorgrimPalette Palette;
-		FVector Location;
-		FVector Size;
-		FRotator Rotation;
+		int16 X;
+		int16 Y;
+		int16 Z;
 	};
 
 	const FThorgrimPartDefinition GThorgrimPartDefinitions[] =
@@ -82,12 +83,17 @@ namespace
 		{ EThorgrimPalette::Cloth, TEXT("Cloth"), FLinearColor::FromSRGBColor(FColor(36, 52, 66)) }
 	};
 
-	int32 GetThorgrimMeshKey(EThorgrimPart Part, EThorgrimPalette Palette)
+	int32 GetThorgrimMeshKey(EThorgrimPart Part, EThorgrimPalette Palette, int32 ShadeIndex)
 	{
-		return static_cast<int32>(Part) * UE_ARRAY_COUNT(GThorgrimPaletteDefinitions) + static_cast<int32>(Palette);
+		return (
+			static_cast<int32>(Part) * UE_ARRAY_COUNT(GThorgrimPaletteDefinitions)
+			+ static_cast<int32>(Palette))
+			* EmberdeepVoxelStyle::ShadeCount
+			+ ShadeIndex;
 	}
 
 #include "ThorgrimVoxelData.inl"
+	static_assert(GThorgrimVoxelUnitCm == EmberdeepVoxelStyle::UnitCm);
 }
 
 AEmberdeepCharacter::AEmberdeepCharacter()
@@ -137,6 +143,11 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 	ThorgrimShieldRoot->SetRelativeLocation(GThorgrimShieldPivot);
 
 	TMap<int32, UInstancedStaticMeshComponent*> PaletteMeshes;
+	TArray<TArray<FTransform>> VoxelTransformsByMesh;
+	VoxelTransformsByMesh.SetNum(
+		UE_ARRAY_COUNT(GThorgrimPartDefinitions)
+		* UE_ARRAY_COUNT(GThorgrimPaletteDefinitions)
+		* EmberdeepVoxelStyle::ShadeCount);
 	for (const FThorgrimPartDefinition& PartDefinition : GThorgrimPartDefinitions)
 	{
 		USceneComponent* PartRoot = RootComponent;
@@ -151,29 +162,45 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 
 		for (const FThorgrimPaletteDefinition& PaletteDefinition : GThorgrimPaletteDefinitions)
 		{
-			const FName ComponentName(*FString::Printf(
-				TEXT("Thorgrim%s%s"),
-				PartDefinition.Name,
-				PaletteDefinition.Name));
-			UInstancedStaticMeshComponent* PaletteMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(ComponentName);
-			PaletteMesh->SetupAttachment(PartRoot);
-			PaletteMesh->SetMobility(EComponentMobility::Movable);
-			PaletteMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-			PaletteMesh->SetGenerateOverlapEvents(false);
-			PaletteMesh->SetCanEverAffectNavigation(false);
-			PaletteMesh->SetStaticMesh(CubeMesh.Object);
-			ThorgrimPaletteMeshes.Add(PaletteMesh);
-			PaletteMeshes.Add(GetThorgrimMeshKey(PartDefinition.Part, PaletteDefinition.Palette), PaletteMesh);
+			for (int32 ShadeIndex = 0; ShadeIndex < EmberdeepVoxelStyle::ShadeCount; ++ShadeIndex)
+			{
+				const FName ComponentName(*FString::Printf(
+					TEXT("Thorgrim%s%sShade%d"),
+					PartDefinition.Name,
+					PaletteDefinition.Name,
+					ShadeIndex));
+				UInstancedStaticMeshComponent* PaletteMesh =
+					CreateDefaultSubobject<UInstancedStaticMeshComponent>(ComponentName);
+				PaletteMesh->SetupAttachment(PartRoot);
+				PaletteMesh->SetMobility(EComponentMobility::Movable);
+				PaletteMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				PaletteMesh->SetGenerateOverlapEvents(false);
+				PaletteMesh->SetCanEverAffectNavigation(false);
+				PaletteMesh->SetStaticMesh(CubeMesh.Object);
+				ThorgrimPaletteMeshes.Add(PaletteMesh);
+				PaletteMeshes.Add(
+					GetThorgrimMeshKey(PartDefinition.Part, PaletteDefinition.Palette, ShadeIndex),
+					PaletteMesh);
+			}
 		}
 	}
 
-	for (const FThorgrimVoxelBlock& Block : GThorgrimVoxelBlocks)
+	for (const FThorgrimVoxelCell& Voxel : GThorgrimVoxelCells)
 	{
-		if (UInstancedStaticMeshComponent* const* PaletteMesh = PaletteMeshes.Find(GetThorgrimMeshKey(Block.Part, Block.Palette)))
-		{
-			const FVector InstanceScale = Block.Size / 100.0f;
-			(*PaletteMesh)->AddInstance(FTransform(Block.Rotation, Block.Location, InstanceScale));
-		}
+		const int32 ShadeIndex = EmberdeepVoxelStyle::SelectShade(
+			Voxel.X,
+			Voxel.Y,
+			Voxel.Z,
+			static_cast<int32>(Voxel.Palette));
+		const int32 MeshKey = GetThorgrimMeshKey(Voxel.Part, Voxel.Palette, ShadeIndex);
+		VoxelTransformsByMesh[MeshKey].Add(FTransform(
+			FQuat::Identity,
+			EmberdeepVoxelStyle::CellCenter(Voxel.X, Voxel.Y, Voxel.Z),
+			EmberdeepVoxelStyle::InstanceScale()));
+	}
+	for (const TPair<int32, UInstancedStaticMeshComponent*>& PaletteMesh : PaletteMeshes)
+	{
+		PaletteMesh.Value->AddInstances(VoxelTransformsByMesh[PaletteMesh.Key], false, false, false);
 	}
 
 	HealthComponent = CreateDefaultSubobject<UEmberdeepHealthComponent>(TEXT("HealthComponent"));
@@ -206,10 +233,16 @@ void AEmberdeepCharacter::BeginPlay()
 		if (PaletteMesh)
 		{
 			ThorgrimInstanceCount += PaletteMesh->GetInstanceCount();
-			const int32 PaletteIndex = MeshIndex % UE_ARRAY_COUNT(GThorgrimPaletteDefinitions);
+			const int32 ShadeIndex = MeshIndex % EmberdeepVoxelStyle::ShadeCount;
+			const int32 PaletteIndex =
+				(MeshIndex / EmberdeepVoxelStyle::ShadeCount) % UE_ARRAY_COUNT(GThorgrimPaletteDefinitions);
 			if (UMaterialInstanceDynamic* Material = PaletteMesh->CreateDynamicMaterialInstance(0))
 			{
-				Material->SetVectorParameterValue(TEXT("Color"), GThorgrimPaletteDefinitions[PaletteIndex].Color);
+				Material->SetVectorParameterValue(
+					TEXT("Color"),
+					EmberdeepVoxelStyle::ShadeColor(
+						GThorgrimPaletteDefinitions[PaletteIndex].Color,
+						ShadeIndex));
 			}
 		}
 	}

@@ -2,6 +2,7 @@
 
 #include "AIController.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/DamageEvents.h"
 #include "EngineUtils.h"
@@ -14,6 +15,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Visual/EmberdeepVoxelStyle.h"
 
 AEmberdeepEnemy::AEmberdeepEnemy()
 {
@@ -34,12 +36,77 @@ AEmberdeepEnemy::AEmberdeepEnemy()
 	HealthComponent = CreateDefaultSubobject<UEmberdeepHealthComponent>(TEXT("HealthComponent"));
 	HealthComponent->SetMaxHealth(92.0f);
 
-	CreateBoneBlock(TEXT("Ribcage"), FVector(0.0f, 0.0f, 15.0f), FVector(0.42f, 0.28f, 0.55f));
-	CreateBoneBlock(TEXT("Skull"), FVector(0.0f, 0.0f, 75.0f), FVector(0.43f, 0.43f, 0.43f));
-	CreateBoneBlock(TEXT("LeftArm"), FVector(0.0f, -36.0f, 18.0f), FVector(0.15f, 0.16f, 0.62f), FRotator(0.0f, 0.0f, -12.0f));
-	CreateBoneBlock(TEXT("RightArm"), FVector(0.0f, 36.0f, 18.0f), FVector(0.15f, 0.16f, 0.62f), FRotator(0.0f, 0.0f, 12.0f));
-	CreateBoneBlock(TEXT("LeftLeg"), FVector(0.0f, -16.0f, -40.0f), FVector(0.17f, 0.17f, 0.58f));
-	CreateBoneBlock(TEXT("RightLeg"), FVector(0.0f, 16.0f, -40.0f), FVector(0.17f, 0.17f, 0.58f));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	for (int32 ShadeIndex = 0; ShadeIndex < EmberdeepVoxelStyle::ShadeCount; ++ShadeIndex)
+	{
+		const FName MeshName(*FString::Printf(TEXT("BoneVoxels_Shade%d"), ShadeIndex));
+		UInstancedStaticMeshComponent* BoneMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(MeshName);
+		BoneMesh->SetupAttachment(RootComponent);
+		BoneMesh->SetStaticMesh(CubeMesh.Object);
+		BoneMesh->SetMobility(EComponentMobility::Movable);
+		BoneMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		BoneMesh->SetGenerateOverlapEvents(false);
+		BoneMesh->SetCanEverAffectNavigation(false);
+		BoneVoxelMeshes.Add(BoneMesh);
+	}
+
+	TSet<FIntVector> OccupiedCells;
+	const auto AddBox = [&OccupiedCells](const FIntVector& Min, const FIntVector& Max)
+	{
+		for (int32 Z = Min.Z; Z <= Max.Z; ++Z)
+		{
+			for (int32 Y = Min.Y; Y <= Max.Y; ++Y)
+			{
+				for (int32 X = Min.X; X <= Max.X; ++X)
+				{
+					OccupiedCells.Add(FIntVector(X, Y, Z));
+				}
+			}
+		}
+	};
+
+	// One actor-local 4 cm lattice. The silhouette is assembled from cell clusters;
+	// no individual voxel is scaled, stretched, or placed off-grid.
+	AddBox(FIntVector(-2, -2, -3), FIntVector(2, 2, 10)); // spine
+	for (int32 RibZ = 0; RibZ <= 9; RibZ += 3)
+	{
+		const int32 HalfWidth = RibZ >= 6 ? 6 : 5;
+		AddBox(FIntVector(-2, -HalfWidth, RibZ), FIntVector(2, HalfWidth, RibZ + 1));
+	}
+	AddBox(FIntVector(-3, -5, -5), FIntVector(3, 5, -2)); // pelvis
+	AddBox(FIntVector(-4, -4, 12), FIntVector(3, 4, 20)); // skull
+	AddBox(FIntVector(-3, -3, 10), FIntVector(2, 3, 13)); // neck/jaw
+
+	for (const int32 Side : {-1, 1})
+	{
+		for (int32 Step = 0; Step < 13; ++Step)
+		{
+			const int32 Y = Side * (7 + Step / 3);
+			const int32 Z = 9 - Step;
+			AddBox(FIntVector(-2, Y - 1, Z - 1), FIntVector(1, Y + 1, Z + 1));
+		}
+		for (int32 Step = 0; Step < 14; ++Step)
+		{
+			const int32 Y = Side * (3 + Step / 5);
+			const int32 Z = -6 - Step;
+			AddBox(FIntVector(-2, Y - 1, Z), FIntVector(1, Y + 1, Z + 1));
+		}
+		AddBox(FIntVector(-3, Side * 5 - 2, -21), FIntVector(3, Side * 5 + 2, -19));
+	}
+
+	TArray<FTransform> ShadeTransforms[EmberdeepVoxelStyle::ShadeCount];
+	for (const FIntVector& Cell : OccupiedCells)
+	{
+		const int32 ShadeIndex = EmberdeepVoxelStyle::SelectShade(Cell.X, Cell.Y, Cell.Z, 31);
+		ShadeTransforms[ShadeIndex].Emplace(
+			FRotator::ZeroRotator,
+			EmberdeepVoxelStyle::CellCenter(Cell.X, Cell.Y, Cell.Z),
+			EmberdeepVoxelStyle::InstanceScale());
+	}
+	for (int32 ShadeIndex = 0; ShadeIndex < EmberdeepVoxelStyle::ShadeCount; ++ShadeIndex)
+	{
+		BoneVoxelMeshes[ShadeIndex]->AddInstances(ShadeTransforms[ShadeIndex], false, false, true);
+	}
 
 	AttackTelegraph = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("AttackTelegraph"));
 	AttackTelegraph->SetupAttachment(RootComponent);
@@ -52,35 +119,17 @@ AEmberdeepEnemy::AEmberdeepEnemy()
 	AttackTelegraph->SetStaticMesh(CylinderMesh.Object);
 }
 
-UStaticMeshComponent* AEmberdeepEnemy::CreateBoneBlock(
-	FName Name,
-	const FVector& Location,
-	const FVector& Scale,
-	const FRotator& Rotation)
-{
-	UStaticMeshComponent* Bone = CreateDefaultSubobject<UStaticMeshComponent>(Name);
-	Bone->SetupAttachment(RootComponent);
-	Bone->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Bone->SetRelativeLocation(Location);
-	Bone->SetRelativeScale3D(Scale);
-	Bone->SetRelativeRotation(Rotation);
-
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	Bone->SetStaticMesh(CubeMesh.Object);
-	BoneBlocks.Add(Bone);
-	return Bone;
-}
-
 void AEmberdeepEnemy::BeginPlay()
 {
 	Super::BeginPlay();
 	HealthComponent->OnDeath.AddUObject(this, &AEmberdeepEnemy::HandleDeath);
 
-	for (UStaticMeshComponent* Bone : BoneBlocks)
+	const FLinearColor BoneColor(0.48f, 0.42f, 0.31f);
+	for (int32 ShadeIndex = 0; ShadeIndex < BoneVoxelMeshes.Num(); ++ShadeIndex)
 	{
-		if (UMaterialInstanceDynamic* Material = Bone->CreateDynamicMaterialInstance(0))
+		if (UMaterialInstanceDynamic* Material = BoneVoxelMeshes[ShadeIndex]->CreateDynamicMaterialInstance(0))
 		{
-			Material->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.48f, 0.42f, 0.31f));
+			Material->SetVectorParameterValue(TEXT("Color"), EmberdeepVoxelStyle::ShadeColor(BoneColor, ShadeIndex));
 			BoneMaterials.Add(Material);
 		}
 	}
@@ -248,9 +297,11 @@ void AEmberdeepEnemy::ResetHitFlash()
 
 void AEmberdeepEnemy::ApplyBoneColor(const FLinearColor& Color)
 {
-	for (UMaterialInstanceDynamic* Material : BoneMaterials)
+	for (int32 ShadeIndex = 0; ShadeIndex < BoneMaterials.Num(); ++ShadeIndex)
 	{
-		Material->SetVectorParameterValue(TEXT("Color"), Color);
+		BoneMaterials[ShadeIndex]->SetVectorParameterValue(
+			TEXT("Color"),
+			EmberdeepVoxelStyle::ShadeColor(Color, ShadeIndex));
 	}
 }
 

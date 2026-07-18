@@ -1,9 +1,10 @@
 """Build the Broken Caravan Camp from a CC0 MagicaVoxel kit.
 
-The generator deliberately produces cuboids rather than one cube per source
-voxel.  This keeps the camp cheap enough to instance at runtime while retaining
-the chunky silhouette of the source kit.  No network access or DCC application
-is required; the checked-in ``models.vox`` file is the only input.
+Source shapes may be compacted while composing the layout, but the final visible
+geometry is always rasterized onto Emberdeep's shared four-centimetre voxel grid.
+The generated runtime data stores compressed grid rectangles and expands them
+back to uniform visible voxel instances. No network access or DCC application is
+required; the checked-in ``models.vox`` file is the only input.
 """
 
 from __future__ import annotations
@@ -44,6 +45,20 @@ PALETTE: dict[str, str] = {
     "Fire": "#F2A13A",
 }
 
+VOXEL_UNIT_CM = 4.0
+NEIGHBOURS = (
+    (1, 0, 0),
+    (-1, 0, 0),
+    (0, 1, 0),
+    (0, -1, 0),
+    (0, 0, 1),
+    (0, 0, -1),
+)
+# The orthographic camera is fixed on the -X,+Y diagonal. Opposite-facing shell
+# cells are omitted internally, while all visible faces and palette boundaries
+# remain exact uniform voxels.
+CAMERA_SHELL_DIRECTIONS = ((0, 0, 1), (-1, 0, 0), (0, 1, 0))
+
 
 @dataclass(frozen=True)
 class VoxelModel:
@@ -60,6 +75,24 @@ class Block:
     center: tuple[float, float, float]
     size: tuple[float, float, float]
     rotation: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
+
+@dataclass(frozen=True)
+class VoxelCell:
+    palette: str
+    x: int
+    y: int
+    z: int
+
+
+@dataclass(frozen=True)
+class VoxelRect:
+    palette: str
+    x: int
+    y: int
+    z: int
+    size_x: int
+    size_y: int
 
 
 @dataclass(frozen=True)
@@ -504,13 +537,110 @@ class CampBuilder:
         )
 
 
+def rasterize_blocks(blocks: list[Block]) -> dict[tuple[int, int, int], str]:
+    """Snap authored cuboids and rotations onto the one world-space lattice."""
+
+    occupied: dict[tuple[int, int, int], str] = {}
+    for block in blocks:
+        center_x, center_y, center_z = block.center
+        size_x, size_y, size_z = block.size
+        half_x, half_y, half_z = size_x / 2.0, size_y / 2.0, size_z / 2.0
+        yaw = math.radians(block.rotation[1])
+        inverse_cosine = math.cos(-yaw)
+        inverse_sine = math.sin(-yaw)
+        extent_x = abs(math.cos(yaw)) * half_x + abs(math.sin(yaw)) * half_y
+        extent_y = abs(math.sin(yaw)) * half_x + abs(math.cos(yaw)) * half_y
+        wrote_voxel = False
+
+        x_range = range(
+            math.floor((center_x - extent_x) / VOXEL_UNIT_CM) - 1,
+            math.floor((center_x + extent_x) / VOXEL_UNIT_CM) + 2,
+        )
+        y_range = range(
+            math.floor((center_y - extent_y) / VOXEL_UNIT_CM) - 1,
+            math.floor((center_y + extent_y) / VOXEL_UNIT_CM) + 2,
+        )
+        z_range = range(
+            math.floor((center_z - half_z) / VOXEL_UNIT_CM) - 1,
+            math.floor((center_z + half_z) / VOXEL_UNIT_CM) + 2,
+        )
+        for x in x_range:
+            sample_x = (x + 0.5) * VOXEL_UNIT_CM
+            for y in y_range:
+                sample_y = (y + 0.5) * VOXEL_UNIT_CM
+                delta_x = sample_x - center_x
+                delta_y = sample_y - center_y
+                local_x = delta_x * inverse_cosine - delta_y * inverse_sine
+                local_y = delta_x * inverse_sine + delta_y * inverse_cosine
+                if abs(local_x) > half_x + 1e-5 or abs(local_y) > half_y + 1e-5:
+                    continue
+                for z in z_range:
+                    sample_z = (z + 0.5) * VOXEL_UNIT_CM
+                    if abs(sample_z - center_z) <= half_z + 1e-5:
+                        occupied[(x, y, z)] = block.palette
+                        wrote_voxel = True
+
+        if not wrote_voxel:
+            occupied[
+                tuple(math.floor(value / VOXEL_UNIT_CM) for value in block.center)
+            ] = block.palette
+    return occupied
+
+
+def visible_voxels(occupied: dict[tuple[int, int, int], str]) -> list[VoxelCell]:
+    visible: list[VoxelCell] = []
+    for (x, y, z), palette in occupied.items():
+        visible_from_camera = any(
+            (x + dx, y + dy, z + dz) not in occupied
+            for dx, dy, dz in CAMERA_SHELL_DIRECTIONS
+        )
+        if visible_from_camera:
+            visible.append(VoxelCell(palette, x, y, z))
+
+    palette_order = {name: index for index, name in enumerate(PALETTE)}
+    return sorted(
+        visible,
+        key=lambda voxel: (palette_order[voxel.palette], voxel.z, voxel.y, voxel.x),
+    )
+
+
+def compress_voxels(voxels: list[VoxelCell]) -> list[VoxelRect]:
+    """Compress each Z/palette layer into rectangles without changing cells."""
+
+    layers: dict[tuple[str, int], set[tuple[int, int]]] = {}
+    for voxel in voxels:
+        layers.setdefault((voxel.palette, voxel.z), set()).add((voxel.x, voxel.y))
+
+    rectangles: list[VoxelRect] = []
+    palette_order = {name: index for index, name in enumerate(PALETTE)}
+    for (palette, z), source_cells in sorted(
+        layers.items(), key=lambda item: (palette_order[item[0][0]], item[0][1])
+    ):
+        remaining = set(source_cells)
+        while remaining:
+            x0, y0 = min(remaining, key=lambda cell: (cell[1], cell[0]))
+            x1 = x0
+            while (x1 + 1, y0) in remaining:
+                x1 += 1
+
+            y1 = y0
+            while all((x, y1 + 1) in remaining for x in range(x0, x1 + 1)):
+                y1 += 1
+
+            for y in range(y0, y1 + 1):
+                for x in range(x0, x1 + 1):
+                    remaining.remove((x, y))
+            rectangles.append(VoxelRect(palette, x0, y0, z, x1 - x0 + 1, y1 - y0 + 1))
+    return rectangles
+
+
 def fmt(value: float) -> str:
     if abs(value) < 0.0005:
         value = 0.0
     return f"{value:.1f}f"
 
 
-def cpp_text(builder: CampBuilder) -> str:
+def cpp_text(builder: CampBuilder, rectangles: list[VoxelRect], voxel_count: int) -> str:
     lines = [
         "// Generated by SourceAssets/Environment/Campground/generate_camp.py. Do not edit by hand.",
         "// Palette colors are documented beside PALETTE in the generator and Campground README.",
@@ -522,12 +652,16 @@ def cpp_text(builder: CampBuilder) -> str:
         (
             "};",
             "",
-            "struct FCampVoxelBlock",
+            f"static constexpr float GCampVoxelUnitCm = {VOXEL_UNIT_CM:.1f}f;",
+            "",
+            "struct FCampVoxelRect",
             "{",
             "\tECampPalette Palette;",
-            "\tFVector Center;",
-            "\tFVector Size;",
-            "\tFRotator Rotation;",
+            "\tint16 X;",
+            "\tint16 Y;",
+            "\tint16 Z;",
+            "\tuint16 SizeX;",
+            "\tuint16 SizeY;",
             "};",
             "",
             "struct FCampCollisionBox",
@@ -542,25 +676,35 @@ def cpp_text(builder: CampBuilder) -> str:
             "static const FVector GCampShelterLanternLocation(-405.0f, 235.0f, 132.0f);",
             "static const FVector GCampWorkstationLanternLocation(520.0f, -350.0f, 126.0f);",
             "",
-            "static const FCampVoxelBlock GCampVoxelBlocks[] =",
+            "static const FCampVoxelRect GCampVoxelRects[] =",
             "{",
         )
     )
-    previous_group = ""
-    for block in builder.blocks:
-        if block.group != previous_group:
-            lines.append(f"\t// {block.group}")
-            previous_group = block.group
+    previous_palette = ""
+    for rectangle in rectangles:
+        if rectangle.palette != previous_palette:
+            lines.append(f"\t// {rectangle.palette}")
+            previous_palette = rectangle.palette
         lines.append(
-            "\t{ ECampPalette::%s, FVector(%s, %s, %s), FVector(%s, %s, %s), FRotator(%s, %s, %s) },"
+            "\t{ ECampPalette::%s, %d, %d, %d, %d, %d },"
             % (
-                block.palette,
-                *(fmt(value) for value in block.center),
-                *(fmt(value) for value in block.size),
-                *(fmt(value) for value in block.rotation),
+                rectangle.palette,
+                rectangle.x,
+                rectangle.y,
+                rectangle.z,
+                rectangle.size_x,
+                rectangle.size_y,
             )
         )
-    lines.extend(("};", "", "static const FCampCollisionBox GCampCollisionBoxes[] =", "{"))
+    lines.extend(
+        (
+            "};",
+            f"static constexpr int32 GCampVoxelCount = {voxel_count};",
+            "",
+            "static const FCampCollisionBox GCampCollisionBoxes[] =",
+            "{",
+        )
+    )
     for collision in builder.collisions:
         lines.append(f"\t// {collision.name}")
         lines.append(
@@ -579,14 +723,11 @@ def shade(color: str, factor: float) -> tuple[int, int, int]:
     return tuple(max(0, min(255, round(channel * factor))) for channel in rgb(color))
 
 
-def preview_bytes(blocks: list[Block]) -> bytes:
+def preview_bytes(voxels: list[VoxelCell]) -> bytes:
     logical_width, logical_height = 720, 520
     image = Image.new("RGB", (logical_width, logical_height), "#090C10")
     draw = ImageDraw.Draw(image)
-
-    def rotate(x: float, y: float, yaw: float) -> tuple[float, float]:
-        angle = math.radians(yaw)
-        return (x * math.cos(angle) - y * math.sin(angle), x * math.sin(angle) + y * math.cos(angle))
+    palette_indices = {name: index for index, name in enumerate(PALETTE)}
 
     def project(point: tuple[float, float, float]) -> tuple[float, float]:
         x, y, z = point
@@ -594,38 +735,71 @@ def preview_bytes(blocks: list[Block]) -> bytes:
         # -X,+Y diagonal, with world +X,+Y running toward screen-right.
         return (logical_width / 2.0 + (x + y) * 0.205, 310.0 + (-x + y) * 0.118 - z * 0.117)
 
-    def vertices(block: Block) -> list[tuple[float, float, float]]:
-        half_x, half_y, half_z = (value / 2.0 for value in block.size)
-        result: list[tuple[float, float, float]] = []
-        for x, y, z in (
-            (-half_x, -half_y, -half_z), (half_x, -half_y, -half_z),
-            (half_x, half_y, -half_z), (-half_x, half_y, -half_z),
-            (-half_x, -half_y, half_z), (half_x, -half_y, half_z),
-            (half_x, half_y, half_z), (-half_x, half_y, half_z),
-        ):
-            rotated_x, rotated_y = rotate(x, y, block.rotation[1])
-            result.append((block.center[0] + rotated_x, block.center[1] + rotated_y, block.center[2] + z))
-        return result
+    def center(voxel: VoxelCell) -> tuple[float, float, float]:
+        return (
+            (voxel.x + 0.5) * VOXEL_UNIT_CM,
+            (voxel.y + 0.5) * VOXEL_UNIT_CM,
+            (voxel.z + 0.5) * VOXEL_UNIT_CM,
+        )
+
+    def vertices(voxel: VoxelCell) -> list[tuple[float, float, float]]:
+        center_x, center_y, center_z = center(voxel)
+        half = VOXEL_UNIT_CM / 2.0
+        return [
+            (center_x + x, center_y + y, center_z + z)
+            for x, y, z in (
+                (-half, -half, -half), (half, -half, -half),
+                (half, half, -half), (-half, half, -half),
+                (-half, -half, half), (half, -half, half),
+                (half, half, half), (-half, half, half),
+            )
+        ]
+
+    def shade_index(voxel: VoxelCell) -> int:
+        value = 2166136261
+        for component in (voxel.x, voxel.y, voxel.z, palette_indices[voxel.palette]):
+            value = ((value ^ (component & 0xFFFFFFFF)) * 16777619) & 0xFFFFFFFF
+        selector = value % 16
+        if selector < 3:
+            return 0
+        return 2 if selector == 15 else 1
 
     # Camera looks from -X,+Y. Draw far blocks first, then their visible faces.
     ordered = sorted(
-        blocks,
-        key=lambda block: (-block.center[0] + block.center[1] + block.center[2] * 2.02, block.group),
+        voxels,
+        key=lambda voxel: (
+            -center(voxel)[0] + center(voxel)[1] + center(voxel)[2] * 2.02,
+            voxel.palette,
+        ),
     )
 
-    def draw_block(block: Block) -> None:
-        points = vertices(block)
+    def draw_voxel(voxel: VoxelCell) -> None:
+        points = vertices(voxel)
         projected = [project(point) for point in points]
-        color = PALETTE[block.palette]
-        draw.polygon([projected[index] for index in (0, 4, 7, 3)], fill=shade(color, 0.58))
-        draw.polygon([projected[index] for index in (3, 2, 6, 7)], fill=shade(color, 0.76))
-        draw.polygon([projected[index] for index in (4, 5, 6, 7)], fill=shade(color, 1.08))
+        color = PALETTE[voxel.palette]
+        variation = (0.72, 1.0, 1.16)[shade_index(voxel)]
+        outline = shade(color, 0.30 * variation)
+        draw.polygon(
+            [projected[index] for index in (0, 4, 7, 3)],
+            fill=shade(color, 0.58 * variation),
+            outline=outline,
+        )
+        draw.polygon(
+            [projected[index] for index in (3, 2, 6, 7)],
+            fill=shade(color, 0.76 * variation),
+            outline=outline,
+        )
+        draw.polygon(
+            [projected[index] for index in (4, 5, 6, 7)],
+            fill=shade(color, 1.08 * variation),
+            outline=outline,
+        )
 
     # Ground first, then translucent stepped light pools, then upright props.
     # This is a readability preview, not a substitute for Unreal's point lights.
-    for block in ordered:
-        if block.group in {"Ground", "Frost"}:
-            draw_block(block)
+    for voxel in ordered:
+        if voxel.z <= 2:
+            draw_voxel(voxel)
 
     light_overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
     light_draw = ImageDraw.Draw(light_overlay)
@@ -644,14 +818,18 @@ def preview_bytes(blocks: list[Block]) -> bytes:
     image = Image.alpha_composite(image.convert("RGBA"), light_overlay).convert("RGB")
     draw = ImageDraw.Draw(image)
 
-    for block in ordered:
-        if block.group not in {"Ground", "Frost"}:
-            draw_block(block)
+    for voxel in ordered:
+        if voxel.z > 2:
+            draw_voxel(voxel)
 
     # Presentation frame and simple labels remain deterministic and font-independent.
     draw.rectangle((12, 12, logical_width - 13, logical_height - 13), outline="#6D4B2C", width=2)
     draw.text((28, 24), "BROKEN CARAVAN CAMP  /  PLAYABLE V0", fill="#D59A52")
-    draw.text((28, logical_height - 42), f"{len(blocks)} MERGED VOXEL CUBOIDS  |  18 x 14 METRES", fill="#8C8273")
+    draw.text(
+        (28, logical_height - 42),
+        f"{len(voxels)} VISIBLE {VOXEL_UNIT_CM:.0f} CM VOXELS  |  18 x 14 METRES",
+        fill="#8C8273",
+    )
 
     final = image.resize((logical_width * 2, logical_height * 2), Image.Resampling.NEAREST)
     output = BytesIO()
@@ -659,10 +837,16 @@ def preview_bytes(blocks: list[Block]) -> bytes:
     return output.getvalue()
 
 
-def validate(builder: CampBuilder) -> None:
+def validate(builder: CampBuilder, voxels: list[VoxelCell], rectangles: list[VoxelRect]) -> None:
     if not 500 <= len(builder.blocks) <= 1500:
-        raise ValueError(f"Camp block count {len(builder.blocks)} is outside the 500-1500 target")
-    used = {block.palette for block in builder.blocks}
+        raise ValueError(f"Camp source block count {len(builder.blocks)} is outside the 500-1500 target")
+    if not 150_000 <= len(voxels) <= 350_000:
+        raise ValueError(f"Camp fixed-grid voxel count {len(voxels)} is outside the expected range")
+    if not rectangles or len(rectangles) >= len(voxels):
+        raise ValueError("Camp voxel rectangle compression is ineffective")
+    if sum(rectangle.size_x * rectangle.size_y for rectangle in rectangles) != len(voxels):
+        raise ValueError("Compressed camp rectangles do not preserve the visible voxel count")
+    used = {voxel.palette for voxel in voxels}
     missing = set(PALETTE) - used
     if missing:
         raise ValueError(f"Unused palette entries: {sorted(missing)}")
@@ -674,16 +858,19 @@ def validate(builder: CampBuilder) -> None:
             raise ValueError(f"Block outside 1800x1400 camp dressing bounds: {block}")
 
 
-def generate(check: bool = False) -> CampBuilder:
+def generate(check: bool = False) -> tuple[CampBuilder, list[VoxelCell], list[VoxelRect]]:
     models, source_palette = VoxReader(VOX_INPUT.read_bytes()).parse()
     if len(models) != 363:
         raise ValueError(f"Expected 363 CC0 source models, found {len(models)}")
     builder = CampBuilder(models, source_palette)
     builder.build()
-    validate(builder)
+    occupied = rasterize_blocks(builder.blocks)
+    voxels = visible_voxels(occupied)
+    rectangles = compress_voxels(voxels)
+    validate(builder, voxels, rectangles)
 
-    cpp = cpp_text(builder).encode("utf-8")
-    preview = preview_bytes(builder.blocks)
+    cpp = cpp_text(builder, rectangles, len(voxels)).encode("utf-8")
+    preview = preview_bytes(voxels)
     if check:
         if not CPP_OUTPUT.exists() or CPP_OUTPUT.read_bytes() != cpp:
             raise SystemExit(f"Generated output is stale: {CPP_OUTPUT}")
@@ -698,7 +885,7 @@ def generate(check: bool = False) -> CampBuilder:
         for path, content in ((CPP_OUTPUT, cpp), (PREVIEW_OUTPUT, preview)):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content)
-    return builder
+    return builder, voxels, rectangles
 
 
 def main() -> None:
@@ -713,9 +900,12 @@ def main() -> None:
             print(f"{model.model_id:3d}  {model.name:52s}  {model.size!s:16s}  {len(model.voxels):6d} voxels")
         return
 
-    builder = generate(arguments.check)
+    builder, voxels, rectangles = generate(arguments.check)
     unique_sources = {(model_id, name) for model_id, name, _ in builder.selected}
-    print(f"Camp generated: {len(builder.blocks)} cuboids, {len(builder.collisions)} collision boxes")
+    print(
+        f"Camp generated: {len(voxels)} visible {VOXEL_UNIT_CM:.1f} cm voxels, "
+        f"{len(rectangles)} compressed rectangles, {len(builder.collisions)} collision boxes"
+    )
     print(f"Source placements: {len(builder.selected)} from {len(unique_sources)} unique CC0 models")
     for model_id, name, cuboids in sorted(set(builder.selected)):
         print(f"  {model_id:3d} {name}: {cuboids} merged cuboids")

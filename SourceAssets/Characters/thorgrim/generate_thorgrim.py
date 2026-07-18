@@ -26,6 +26,7 @@ MTL_OUTPUT = EXPORT_DIR / "thorgrim_v0.mtl"
 # The runtime character origin is at capsule centre; authoring origin is at the feet.
 RUNTIME_Z_OFFSET_CM = -80.0
 MODEL_SCALE = 165.0 / 175.0
+VOXEL_UNIT_CM = 4.0
 
 PALETTE = {
     "Night": "#18202B",
@@ -45,6 +46,15 @@ PART_PIVOTS = {
     "Shield": (38.0, -69.0, 77.0),
 }
 
+# Equipment pivots are snapped to the same actor-local grid as the body. They
+# may rotate during animation, but their authored bind-pose voxels remain on
+# the one shared four-centimetre lattice.
+RUNTIME_PART_PIVOTS = {
+    "Body": (0.0, 0.0, 0.0),
+    "Axe": (12.0, 64.0, -32.0),
+    "Shield": (36.0, -64.0, -8.0),
+}
+
 
 @dataclass(frozen=True)
 class Block:
@@ -53,6 +63,15 @@ class Block:
     center: tuple[float, float, float]
     size: tuple[float, float, float]
     rotation: tuple[float, float, float] = (0.0, 0.0, 0.0)  # pitch, yaw, roll
+
+
+@dataclass(frozen=True)
+class VoxelCell:
+    part: str
+    palette: str
+    x: int
+    y: int
+    z: int
 
 
 BLOCKS: list[Block] = []
@@ -295,7 +314,110 @@ def block_part(block: Block) -> str:
     return "Body"
 
 
-def validate_model() -> None:
+NEIGHBOURS = (
+    (1, 0, 0),
+    (-1, 0, 0),
+    (0, 1, 0),
+    (0, -1, 0),
+    (0, 0, 1),
+    (0, 0, -1),
+)
+
+
+def voxel_center(voxel: VoxelCell) -> np.ndarray:
+    return np.asarray(
+        (
+            (voxel.x + 0.5) * VOXEL_UNIT_CM,
+            (voxel.y + 0.5) * VOXEL_UNIT_CM,
+            (voxel.z + 0.5) * VOXEL_UNIT_CM,
+        )
+    )
+
+
+def voxel_vertices(voxel: VoxelCell) -> np.ndarray:
+    half = VOXEL_UNIT_CM / 2.0
+    center = voxel_center(voxel)
+    return np.asarray(
+        (
+            (-half, -half, -half),
+            (half, -half, -half),
+            (half, half, -half),
+            (-half, half, -half),
+            (-half, -half, half),
+            (half, -half, half),
+            (half, half, half),
+            (-half, half, half),
+        )
+    ) + center
+
+
+def voxelize_model() -> list[VoxelCell]:
+    """Rasterize every authored cluster onto one actor-local voxel lattice."""
+
+    occupied: dict[tuple[str, int, int, int], str] = {}
+    for block in BLOCKS:
+        part = block_part(block)
+        center = np.asarray(block.center) * MODEL_SCALE
+        center[2] += RUNTIME_Z_OFFSET_CM
+        size = np.asarray(block.size) * MODEL_SCALE
+        rotation = rotation_matrix(block.rotation)
+        vertices = block_vertices(block) * MODEL_SCALE
+        vertices[:, 2] += RUNTIME_Z_OFFSET_CM
+        minimum = vertices.min(axis=0)
+        maximum = vertices.max(axis=0)
+        wrote_voxel = False
+
+        ranges = tuple(
+            range(
+                math.floor(minimum[axis] / VOXEL_UNIT_CM) - 1,
+                math.floor(maximum[axis] / VOXEL_UNIT_CM) + 2,
+            )
+            for axis in range(3)
+        )
+        for x in ranges[0]:
+            for y in ranges[1]:
+                for z in ranges[2]:
+                    sample = np.asarray(
+                        (
+                            (x + 0.5) * VOXEL_UNIT_CM,
+                            (y + 0.5) * VOXEL_UNIT_CM,
+                            (z + 0.5) * VOXEL_UNIT_CM,
+                        )
+                    )
+                    local = (sample - center) @ rotation
+                    if np.all(np.abs(local) <= size / 2.0 + 1e-5):
+                        occupied[(part, x, y, z)] = block.palette
+                        wrote_voxel = True
+
+        # Preserve sub-grid accents such as eyes and rivets by assigning their
+        # nearest cell. Later detail blocks intentionally override base masses.
+        if not wrote_voxel:
+            x, y, z = (math.floor(value / VOXEL_UNIT_CM) for value in center)
+            occupied[(part, x, y, z)] = block.palette
+
+    visible: list[VoxelCell] = []
+    for (part, x, y, z), palette in occupied.items():
+        if any(
+            occupied.get((part, x + dx, y + dy, z + dz)) != palette
+            for dx, dy, dz in NEIGHBOURS
+        ):
+            visible.append(VoxelCell(part, palette, x, y, z))
+
+    part_order = {name: index for index, name in enumerate(PART_PIVOTS)}
+    palette_order = {name: index for index, name in enumerate(PALETTE)}
+    return sorted(
+        visible,
+        key=lambda voxel: (
+            part_order[voxel.part],
+            palette_order[voxel.palette],
+            voxel.z,
+            voxel.y,
+            voxel.x,
+        ),
+    )
+
+
+def validate_model(voxels: list[VoxelCell]) -> None:
     names = [block.name for block in BLOCKS]
     if len(names) != len(set(names)):
         raise ValueError("Every Thorgrim block must have a unique name")
@@ -306,6 +428,13 @@ def validate_model() -> None:
         raise ValueError(f"Palette drift: used={sorted(used_palettes)}, defined={sorted(PALETTE)}")
     if {block_part(block) for block in BLOCKS} != set(PART_PIVOTS):
         raise ValueError("Thorgrim must retain separate body, axe, and shield parts")
+
+    if not 4_000 <= len(voxels) <= 10_000:
+        raise ValueError(f"Unexpected fixed-grid surface voxel count: {len(voxels)}")
+    if {voxel.palette for voxel in voxels} != set(PALETTE):
+        raise ValueError("Fixed-grid conversion lost a palette")
+    if {voxel.part for voxel in voxels} != set(PART_PIVOTS):
+        raise ValueError("Fixed-grid conversion lost a character part")
 
     vertices = np.concatenate([block_vertices(block) * MODEL_SCALE for block in BLOCKS])
     minimum = vertices.min(axis=0)
@@ -324,50 +453,43 @@ FACES = (
 )
 
 
-def write_cpp() -> None:
+def write_cpp(voxels: list[VoxelCell]) -> None:
     lines = [
         "// Generated by SourceAssets/Characters/thorgrim/generate_thorgrim.py. Do not edit by hand.",
+        f"static constexpr float GThorgrimVoxelUnitCm = {VOXEL_UNIT_CM:.1f}f;",
         "static const FVector GThorgrimAxePivot(%.1ff, %.1ff, %.1ff);"
-        % (
-            PART_PIVOTS["Axe"][0] * MODEL_SCALE,
-            PART_PIVOTS["Axe"][1] * MODEL_SCALE,
-            PART_PIVOTS["Axe"][2] * MODEL_SCALE + RUNTIME_Z_OFFSET_CM,
-        ),
+        % RUNTIME_PART_PIVOTS["Axe"],
         "static const FVector GThorgrimShieldPivot(%.1ff, %.1ff, %.1ff);"
-        % (
-            PART_PIVOTS["Shield"][0] * MODEL_SCALE,
-            PART_PIVOTS["Shield"][1] * MODEL_SCALE,
-            PART_PIVOTS["Shield"][2] * MODEL_SCALE + RUNTIME_Z_OFFSET_CM,
-        ),
+        % RUNTIME_PART_PIVOTS["Shield"],
         "",
-        "static const FThorgrimVoxelBlock GThorgrimVoxelBlocks[] =",
+        "static const FThorgrimVoxelCell GThorgrimVoxelCells[] =",
         "{",
     ]
-    for block in BLOCKS:
-        part = block_part(block)
-        world_x, world_y, world_z = (value * MODEL_SCALE for value in block.center)
-        pivot_x, pivot_y, pivot_z = (value * MODEL_SCALE for value in PART_PIVOTS[part])
-        x = world_x - pivot_x
-        y = world_y - pivot_y
-        z = world_z - pivot_z if part != "Body" else world_z + RUNTIME_Z_OFFSET_CM
-        sx, sy, sz = (value * MODEL_SCALE for value in block.size)
-        pitch, yaw, roll = block.rotation
+    for voxel in voxels:
+        pivot = RUNTIME_PART_PIVOTS[voxel.part]
+        pivot_cells = tuple(round(value / VOXEL_UNIT_CM) for value in pivot)
+        x = voxel.x - pivot_cells[0]
+        y = voxel.y - pivot_cells[1]
+        z = voxel.z - pivot_cells[2]
         lines.append(
-            "\t{ EThorgrimPart::%s, EThorgrimPalette::%s, FVector(%.1ff, %.1ff, %.1ff), FVector(%.1ff, %.1ff, %.1ff), FRotator(%.1ff, %.1ff, %.1ff) },"
-            % (part, block.palette, x, y, z, sx, sy, sz, pitch, yaw, roll)
+            "\t{ EThorgrimPart::%s, EThorgrimPalette::%s, %d, %d, %d },"
+            % (voxel.part, voxel.palette, x, y, z)
         )
-    lines.extend(("};", ""))
+    lines.extend(("};", f"static constexpr int32 GThorgrimVoxelCount = {len(voxels)};", ""))
     CPP_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     CPP_OUTPUT.write_text("\n".join(lines), encoding="utf-8", newline="\n")
 
 
-def write_obj() -> None:
+def write_obj(voxels: list[VoxelCell]) -> None:
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-    obj_lines = ["# Thorgrim v0 generated voxel model", f"mtllib {MTL_OUTPUT.name}"]
+    obj_lines = [
+        f"# Thorgrim fixed-grid model ({VOXEL_UNIT_CM:.1f} cm voxels)",
+        f"mtllib {MTL_OUTPUT.name}",
+    ]
     vertex_offset = 1
-    for block in BLOCKS:
-        vertices = block_vertices(block) * MODEL_SCALE
-        obj_lines.extend((f"o {block.name}", f"usemtl {block.palette}"))
+    for index, voxel in enumerate(voxels):
+        vertices = voxel_vertices(voxel)
+        obj_lines.extend((f"o voxel_{index:05d}", f"usemtl {voxel.palette}"))
         obj_lines.extend(f"v {x / 100:.6f} {y / 100:.6f} {z / 100:.6f}" for x, y, z in vertices)
         for face in FACES:
             indices = " ".join(str(vertex_offset + index) for index in face)
@@ -387,7 +509,7 @@ def shade(hex_color: str, factor: float) -> tuple[int, int, int]:
     return tuple(max(0, min(255, round(value * factor))) for value in values)
 
 
-def render_preview() -> None:
+def render_preview(voxels: list[VoxelCell]) -> None:
     logical_size = 560
     image = Image.new("RGB", (logical_size, logical_size), "#090C10")
     draw = ImageDraw.Draw(image)
@@ -407,8 +529,8 @@ def render_preview() -> None:
     faces_to_draw: list[tuple[float, list[tuple[float, float]], tuple[int, int, int]]] = []
     projected_points: list[tuple[float, float]] = []
     raw_faces: list[tuple[float, np.ndarray, str, float]] = []
-    for block in BLOCKS:
-        vertices = block_vertices(block)
+    for voxel in voxels:
+        vertices = voxel_vertices(voxel)
         for face in FACES:
             face_vertices = vertices[list(face)]
             edge_a = face_vertices[1] - face_vertices[0]
@@ -424,7 +546,7 @@ def render_preview() -> None:
             depth = float(np.dot(face_center - camera, forward))
             brightness = 0.62 + 0.38 * max(0.0, float(np.dot(normal, light)))
             points = np.column_stack(((face_vertices - target) @ right, (face_vertices - target) @ camera_up))
-            raw_faces.append((depth, points, block.palette, brightness))
+            raw_faces.append((depth, points, voxel.palette, brightness))
             projected_points.extend((float(point[0]), float(point[1])) for point in points)
 
     xs = [point[0] for point in projected_points]
@@ -443,8 +565,13 @@ def render_preview() -> None:
         draw.polygon(points, fill=color, outline="#111419")
 
     font = ImageFont.load_default()
-    draw.text((20, 18), "THORGRIM  /  V0 RUNTIME MODEL", fill="#D2C2A2", font=font)
-    draw.text((20, 36), f"{len(BLOCKS)} voxel clusters  |  165 cm target", fill="#777572", font=font)
+    draw.text((20, 18), "THORGRIM  /  FIXED-GRID RUNTIME MODEL", fill="#D2C2A2", font=font)
+    draw.text(
+        (20, 36),
+        f"{len(voxels)} visible {VOXEL_UNIT_CM:.0f} cm voxels  |  165 cm target",
+        fill="#777572",
+        font=font,
+    )
     swatch_x = 20
     for name, color in PALETTE.items():
         draw.rectangle((swatch_x, 516, swatch_x + 34, 530), fill=color, outline="#34383D")
@@ -457,11 +584,12 @@ def render_preview() -> None:
 
 def main() -> None:
     build_model()
-    validate_model()
-    write_cpp()
-    write_obj()
-    render_preview()
-    print(f"Generated Thorgrim with {len(BLOCKS)} voxel clusters")
+    voxels = voxelize_model()
+    validate_model(voxels)
+    write_cpp(voxels)
+    write_obj(voxels)
+    render_preview(voxels)
+    print(f"Generated Thorgrim with {len(voxels)} visible {VOXEL_UNIT_CM:.1f} cm voxels")
     print(CPP_OUTPUT)
     print(OBJ_OUTPUT)
     print(PREVIEW_OUTPUT)

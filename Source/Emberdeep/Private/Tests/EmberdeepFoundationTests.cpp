@@ -13,6 +13,50 @@
 #include "Gameplay/EmberdeepHealthComponent.h"
 #include "UI/EmberdeepHUD.h"
 #include "UI/EmberdeepMainMenuWidget.h"
+#include "Visual/EmberdeepVoxelStyle.h"
+
+namespace
+{
+	bool ValidateFixedVoxelMeshes(
+		FAutomationTestBase& Test,
+		const TCHAR* AssetName,
+		const TArray<UInstancedStaticMeshComponent*>& Meshes)
+	{
+		bool bValid = true;
+		const FVector ExpectedScale = EmberdeepVoxelStyle::InstanceScale();
+		for (const UInstancedStaticMeshComponent* Mesh : Meshes)
+		{
+			for (int32 InstanceIndex = 0; InstanceIndex < Mesh->GetInstanceCount(); ++InstanceIndex)
+			{
+				FTransform Transform;
+				if (!Mesh->GetInstanceTransform(InstanceIndex, Transform, false))
+				{
+					Test.AddError(FString::Printf(TEXT("%s has an unreadable voxel instance"), AssetName));
+					bValid = false;
+					continue;
+				}
+
+				if (!Transform.GetScale3D().Equals(ExpectedScale, KINDA_SMALL_NUMBER))
+				{
+					Test.AddError(FString::Printf(TEXT("%s contains a stretched voxel"), AssetName));
+					return false;
+				}
+
+				const FVector Location = Transform.GetLocation();
+				for (const float Coordinate : {Location.X, Location.Y, Location.Z})
+				{
+					const float CellCoordinate = Coordinate / EmberdeepVoxelStyle::UnitCm - 0.5f;
+					if (!FMath::IsNearlyEqual(CellCoordinate, FMath::RoundToFloat(CellCoordinate), KINDA_SMALL_NUMBER))
+					{
+						Test.AddError(FString::Printf(TEXT("%s contains an off-grid voxel"), AssetName));
+						return false;
+					}
+				}
+			}
+		}
+		return bValid;
+	}
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FEmberdeepFoundationClassesTest,
@@ -47,19 +91,22 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Characters begin with an empty XP bar"), CharacterDefault->GetExperienceNormalized(), 0.0f);
 	TArray<UInstancedStaticMeshComponent*> ThorgrimPaletteMeshes;
 	CharacterDefault->GetComponents<UInstancedStaticMeshComponent>(ThorgrimPaletteMeshes);
-	TestEqual(TEXT("Thorgrim must provide body, axe, and shield palette groups"), ThorgrimPaletteMeshes.Num(), 27);
+	TestEqual(TEXT("Thorgrim must provide three shades for each part and palette"), ThorgrimPaletteMeshes.Num(), 81);
 
 	int32 ThorgrimInstanceCount = 0;
 	for (const UInstancedStaticMeshComponent* PaletteMesh : ThorgrimPaletteMeshes)
 	{
 		ThorgrimInstanceCount += PaletteMesh->GetInstanceCount();
 	}
-	TestTrue(TEXT("Thorgrim must retain the agreed voxel density"), ThorgrimInstanceCount >= 200);
+	TestEqual(TEXT("Thorgrim must retain the agreed fixed-grid voxel density"), ThorgrimInstanceCount, 8746);
+	TestTrue(
+		TEXT("Every Thorgrim cell must use the shared 4 cm lattice"),
+		ValidateFixedVoxelMeshes(*this, TEXT("Thorgrim"), ThorgrimPaletteMeshes));
 
 	const AEmberdeepCampEnvironment* CampDefault =
 		AEmberdeepCampEnvironment::StaticClass()->GetDefaultObject<AEmberdeepCampEnvironment>();
-	TestEqual(TEXT("The camp must batch its restricted palette"), CampDefault->GetPaletteMeshCount(), 13);
-	TestTrue(TEXT("The camp must retain its environment dressing"), CampDefault->GetVoxelInstanceCount() >= 1200);
+	TestEqual(TEXT("The camp must provide three shades for each restricted palette color"), CampDefault->GetPaletteMeshCount(), 39);
+	TestEqual(TEXT("The camp must retain its fixed-grid environment dressing"), CampDefault->GetVoxelInstanceCount(), 256394);
 	TestEqual(
 		TEXT("The camp must provide floor, perimeter, and prop collision proxies"),
 		CampDefault->GetCollisionProxyCount(),
@@ -71,6 +118,9 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 
 	TArray<UInstancedStaticMeshComponent*> CampPaletteMeshes;
 	CampDefault->GetComponents<UInstancedStaticMeshComponent>(CampPaletteMeshes);
+	TestTrue(
+		TEXT("Every camp cell must use the shared 4 cm lattice"),
+		ValidateFixedVoxelMeshes(*this, TEXT("Broken Caravan Camp"), CampPaletteMeshes));
 	for (const UInstancedStaticMeshComponent* PaletteMesh : CampPaletteMeshes)
 	{
 		TestTrue(
@@ -91,6 +141,22 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 			CollisionProxy->GetCollisionResponseToChannel(ECC_Pawn),
 			ECR_Block);
 	}
+
+	const AEmberdeepEnemy* EnemyDefault = AEmberdeepEnemy::StaticClass()->GetDefaultObject<AEmberdeepEnemy>();
+	TArray<UInstancedStaticMeshComponent*> EnemyVoxelMeshes;
+	EnemyDefault->GetComponents<UInstancedStaticMeshComponent>(EnemyVoxelMeshes);
+	TestEqual(TEXT("The skeleton must use three fixed-grid shade batches"), EnemyVoxelMeshes.Num(), 3);
+	TestTrue(
+		TEXT("Every skeleton cell must use the shared 4 cm lattice"),
+		ValidateFixedVoxelMeshes(*this, TEXT("Skeleton"), EnemyVoxelMeshes));
+
+	const AEmberdeepGoldPickup* GoldDefault = AEmberdeepGoldPickup::StaticClass()->GetDefaultObject<AEmberdeepGoldPickup>();
+	TArray<UInstancedStaticMeshComponent*> GoldVoxelMeshes;
+	GoldDefault->GetComponents<UInstancedStaticMeshComponent>(GoldVoxelMeshes);
+	TestEqual(TEXT("Gold pickups must use three fixed-grid shade batches"), GoldVoxelMeshes.Num(), 3);
+	TestTrue(
+		TEXT("Every gold cell must use the shared 4 cm lattice"),
+		ValidateFixedVoxelMeshes(*this, TEXT("Gold pickup"), GoldVoxelMeshes));
 	return true;
 }
 

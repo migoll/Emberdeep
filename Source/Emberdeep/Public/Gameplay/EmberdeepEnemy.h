@@ -5,6 +5,7 @@
 #include "EmberdeepEnemy.generated.h"
 
 class UEmberdeepHealthComponent;
+class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class UStaticMeshComponent;
 
@@ -34,12 +35,6 @@ private:
 	void ResetHitFlash();
 	void ApplyBoneColor(const FLinearColor& Color);
 
-	UStaticMeshComponent* CreateBoneBlock(
-		FName Name,
-		const FVector& Location,
-		const FVector& Scale,
-		const FRotator& Rotation = FRotator::ZeroRotator);
-
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UEmberdeepHealthComponent> HealthComponent;
 
@@ -47,7 +42,7 @@ private:
 	TObjectPtr<UStaticMeshComponent> AttackTelegraph;
 
 	UPROPERTY()
-	TArray<TObjectPtr<UStaticMeshComponent>> BoneBlocks;
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> BoneVoxelMeshes;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> BoneMaterials;

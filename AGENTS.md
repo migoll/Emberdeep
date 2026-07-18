@@ -8,7 +8,10 @@ Emberdeep is a dark-fantasy action RPG. The long-term direction is server-author
 
 - Technically 3D, presented like premium modern pixel art.
 - Fixed near-isometric camera with an orthographic projection.
-- Chunky low-poly, voxel-inspired geometry; this is not a destructible voxel world.
+- All visible solid art uses one 4 cm fundamental voxel lattice; this is not a destructible voxel world.
+- Larger forms are assembled from repeated 4 cm cells (for example, a 2x2 face), never made by stretching an individual voxel or placing arbitrary cuboids off-grid.
+- Characters, equipment, props, and environments share the same cell size. Animation may translate and rotate rigid voxel clusters, but must not shear or non-uniformly scale their cells.
+- Glows, particles, fog, telegraphs, and other effects are the deliberate exceptions to the solid-geometry lattice.
 - Oversized heads, hands, weapons, shields, and shoulder armour.
 - Restricted dark-fantasy palette and strong silhouette/value separation.
 - Hard-edged lighting, restrained fog, warm torch pools, and colored ability light.
@@ -35,4 +38,3 @@ The reference target is the approved four-hero dungeon combat concept: Diablo-li
 ## Scope discipline
 
 Only implement the active roadmap phase. Do not add accounts, persistence, matchmaking, procedural dungeons, inventory frameworks, AI Dungeon Master integration, or backend services until their phase begins.
-
