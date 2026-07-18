@@ -50,14 +50,18 @@ void AEmberdeepGameMode::SpawnCombatEncounter()
 
 	FActorSpawnParameters SpawnParameters;
 	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	for (const FVector& EnemyLocation : EnemyLocations)
+	for (int32 EnemyIndex = 0; EnemyIndex < EnemyLocations.Num(); ++EnemyIndex)
 	{
-		if (GetWorld()->SpawnActor<AEmberdeepEnemy>(
+		if (AEmberdeepEnemy* Enemy = GetWorld()->SpawnActor<AEmberdeepEnemy>(
 			AEmberdeepEnemy::StaticClass(),
-			EnemyLocation,
+			EnemyLocations[EnemyIndex],
 			FRotator::ZeroRotator,
 			SpawnParameters))
 		{
+			if (EnemyIndex == EnemyLocations.Num() - 1)
+			{
+				Enemy->ConfigureAsElite();
+			}
 			++RemainingEnemies;
 		}
 	}

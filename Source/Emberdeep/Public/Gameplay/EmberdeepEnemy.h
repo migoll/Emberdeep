@@ -17,8 +17,11 @@ public:
 	AEmberdeepEnemy();
 	virtual void Tick(float DeltaSeconds) override;
 	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
+	void ConfigureAsElite();
 
 	UEmberdeepHealthComponent* GetHealthComponent() const { return HealthComponent; }
+	bool IsElite() const { return bIsElite; }
+	bool IsAttackWindingUp() const { return bAttackWindingUp; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -26,8 +29,10 @@ protected:
 private:
 	void UpdateServerAI();
 	void AttackTarget(ACharacter* TargetCharacter);
+	void ResolveEliteAttack();
 	void HandleDeath();
 	void ResetHitFlash();
+	void ApplyBoneColor(const FLinearColor& Color);
 
 	UStaticMeshComponent* CreateBoneBlock(
 		FName Name,
@@ -37,6 +42,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UEmberdeepHealthComponent> HealthComponent;
+
+	UPROPERTY(VisibleAnywhere, Category = "Combat")
+	TObjectPtr<UStaticMeshComponent> AttackTelegraph;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMeshComponent>> BoneBlocks;
@@ -58,4 +66,8 @@ private:
 
 	float NextAttackTime = 0.0f;
 	bool bHasAggro = false;
+	bool bIsElite = false;
+	bool bAttackWindingUp = false;
+	int32 GoldDropValue = 7;
+	TWeakObjectPtr<ACharacter> PendingAttackTarget;
 };

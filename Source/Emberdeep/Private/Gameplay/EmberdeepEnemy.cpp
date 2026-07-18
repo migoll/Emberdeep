@@ -36,6 +36,16 @@ AEmberdeepEnemy::AEmberdeepEnemy()
 	CreateBoneBlock(TEXT("RightArm"), FVector(0.0f, 36.0f, 18.0f), FVector(0.15f, 0.16f, 0.62f), FRotator(0.0f, 0.0f, 12.0f));
 	CreateBoneBlock(TEXT("LeftLeg"), FVector(0.0f, -16.0f, -40.0f), FVector(0.17f, 0.17f, 0.58f));
 	CreateBoneBlock(TEXT("RightLeg"), FVector(0.0f, 16.0f, -40.0f), FVector(0.17f, 0.17f, 0.58f));
+
+	AttackTelegraph = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("AttackTelegraph"));
+	AttackTelegraph->SetupAttachment(RootComponent);
+	AttackTelegraph->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	AttackTelegraph->SetRelativeLocation(FVector(0.0f, 0.0f, -88.0f));
+	AttackTelegraph->SetRelativeScale3D(FVector(2.7f, 2.7f, 0.025f));
+	AttackTelegraph->SetHiddenInGame(true);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	AttackTelegraph->SetStaticMesh(CylinderMesh.Object);
 }
 
 UStaticMeshComponent* AEmberdeepEnemy::CreateBoneBlock(
@@ -70,6 +80,25 @@ void AEmberdeepEnemy::BeginPlay()
 			BoneMaterials.Add(Material);
 		}
 	}
+
+	if (UMaterialInstanceDynamic* TelegraphMaterial = AttackTelegraph->CreateDynamicMaterialInstance(0))
+	{
+		TelegraphMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.9f, 0.015f, 0.005f));
+	}
+}
+
+void AEmberdeepEnemy::ConfigureAsElite()
+{
+	bIsElite = true;
+	HealthComponent->SetMaxHealth(280.0f);
+	AttackDamage = 46.0f;
+	AttackRange = 165.0f;
+	AttackCooldown = 2.25f;
+	AggroRange = 680.0f;
+	GoldDropValue = 30;
+	GetCharacterMovement()->MaxWalkSpeed = 225.0f;
+	SetActorScale3D(FVector(1.25f));
+	ApplyBoneColor(FLinearColor(0.34f, 0.10f, 0.055f));
 }
 
 void AEmberdeepEnemy::Tick(float DeltaSeconds)
@@ -100,6 +129,10 @@ void AEmberdeepEnemy::UpdateServerAI()
 	{
 		return;
 	}
+	if (bAttackWindingUp)
+	{
+		return;
+	}
 
 	if (Distance > AttackRange)
 	{
@@ -113,13 +146,43 @@ void AEmberdeepEnemy::UpdateServerAI()
 
 void AEmberdeepEnemy::AttackTarget(ACharacter* TargetCharacter)
 {
-	if (GetWorld()->GetTimeSeconds() < NextAttackTime)
+	if (bAttackWindingUp || GetWorld()->GetTimeSeconds() < NextAttackTime)
 	{
 		return;
 	}
 
 	NextAttackTime = GetWorld()->GetTimeSeconds() + AttackCooldown;
+	if (bIsElite)
+	{
+		bAttackWindingUp = true;
+		PendingAttackTarget = TargetCharacter;
+		AttackTelegraph->SetHiddenInGame(false);
+		GetCharacterMovement()->StopMovementImmediately();
+		FTimerHandle WindupTimer;
+		GetWorldTimerManager().SetTimer(WindupTimer, this, &AEmberdeepEnemy::ResolveEliteAttack, 0.72f, false);
+		return;
+	}
+
 	UGameplayStatics::ApplyDamage(TargetCharacter, AttackDamage, GetController(), this, UDamageType::StaticClass());
+}
+
+void AEmberdeepEnemy::ResolveEliteAttack()
+{
+	bAttackWindingUp = false;
+	AttackTelegraph->SetHiddenInGame(true);
+
+	ACharacter* TargetCharacter = PendingAttackTarget.Get();
+	PendingAttackTarget.Reset();
+	if (!TargetCharacter || HealthComponent->IsDead())
+	{
+		return;
+	}
+
+	const float Distance = FVector::Dist2D(GetActorLocation(), TargetCharacter->GetActorLocation());
+	if (Distance <= AttackRange + 35.0f)
+	{
+		UGameplayStatics::ApplyDamage(TargetCharacter, AttackDamage, GetController(), this, UDamageType::StaticClass());
+	}
 }
 
 float AEmberdeepEnemy::TakeDamage(
@@ -142,10 +205,7 @@ float AEmberdeepEnemy::TakeDamage(
 		LaunchCharacter(PointDamage->ShotDirection, true, false);
 	}
 
-	for (UMaterialInstanceDynamic* Material : BoneMaterials)
-	{
-		Material->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.95f, 0.055f, 0.02f));
-	}
+	ApplyBoneColor(FLinearColor(0.95f, 0.055f, 0.02f));
 	FTimerHandle FlashTimer;
 	GetWorldTimerManager().SetTimer(FlashTimer, this, &AEmberdeepEnemy::ResetHitFlash, 0.10f, false);
 	return AppliedDamage;
@@ -153,9 +213,16 @@ float AEmberdeepEnemy::TakeDamage(
 
 void AEmberdeepEnemy::ResetHitFlash()
 {
+	ApplyBoneColor(bIsElite
+		? FLinearColor(0.34f, 0.10f, 0.055f)
+		: FLinearColor(0.48f, 0.42f, 0.31f));
+}
+
+void AEmberdeepEnemy::ApplyBoneColor(const FLinearColor& Color)
+{
 	for (UMaterialInstanceDynamic* Material : BoneMaterials)
 	{
-		Material->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.48f, 0.42f, 0.31f));
+		Material->SetVectorParameterValue(TEXT("Color"), Color);
 	}
 }
 
@@ -163,6 +230,7 @@ void AEmberdeepEnemy::HandleDeath()
 {
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	AttackTelegraph->SetHiddenInGame(true);
 	SetActorScale3D(FVector(1.15f, 1.15f, 0.20f));
 
 	if (HasAuthority())
@@ -170,7 +238,7 @@ void AEmberdeepEnemy::HandleDeath()
 		const FVector DropLocation = GetActorLocation() + FVector(0.0f, 0.0f, 55.0f);
 		if (AEmberdeepGoldPickup* Pickup = GetWorld()->SpawnActor<AEmberdeepGoldPickup>(DropLocation, FRotator::ZeroRotator))
 		{
-			Pickup->SetGoldValue(7);
+			Pickup->SetGoldValue(GoldDropValue);
 		}
 
 		if (AEmberdeepGameMode* GameMode = GetWorld()->GetAuthGameMode<AEmberdeepGameMode>())

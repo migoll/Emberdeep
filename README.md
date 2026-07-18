@@ -17,10 +17,10 @@ The current Phase 0A slice contains:
 - visible chunky placeholder Fighter;
 - screen-relative WASD movement and invulnerable dodge;
 - basic and heavy melee attacks with cooldowns and knockback;
-- three server-owned skeleton enemies with proximity aggro;
+- two skeletons and an elite Bone Warden with proximity aggro and a telegraphed slam;
 - health, death, automatic encounter restart, enemy hit flashes, and defeat feedback;
 - dropped gold pickups and victory tracking;
-- a placeholder combat HUD for health, dodge recovery, gold, and enemy count;
+- a placeholder combat HUD for player/enemy health, dodge recovery, gold, and enemy count;
 - replicated-ready C++ health and gameplay foundations.
 
 ## Controls

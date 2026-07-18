@@ -3,8 +3,10 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Gameplay/EmberdeepCharacter.h"
+#include "Gameplay/EmberdeepEnemy.h"
 #include "Gameplay/EmberdeepGameMode.h"
 #include "Gameplay/EmberdeepHealthComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 void AEmberdeepHUD::DrawHUD()
 {
@@ -24,6 +26,46 @@ void AEmberdeepHUD::DrawHUD()
 	const float BarWidth = 270.0f;
 	const float Bottom = Canvas->ClipY - 72.0f;
 	const UEmberdeepHealthComponent* Health = Character->GetHealthComponent();
+
+	TArray<AActor*> Enemies;
+	UGameplayStatics::GetAllActorsOfClass(this, AEmberdeepEnemy::StaticClass(), Enemies);
+	for (AActor* EnemyActor : Enemies)
+	{
+		const AEmberdeepEnemy* Enemy = Cast<AEmberdeepEnemy>(EnemyActor);
+		if (!Enemy || Enemy->GetHealthComponent()->IsDead())
+		{
+			continue;
+		}
+
+		FVector2D ScreenPosition;
+		if (PlayerOwner && PlayerOwner->ProjectWorldLocationToScreen(
+			Enemy->GetActorLocation() + FVector(0.0f, 0.0f, Enemy->IsElite() ? 155.0f : 115.0f),
+			ScreenPosition))
+		{
+			const float EnemyBarWidth = Enemy->IsElite() ? 112.0f : 76.0f;
+			DrawBar(
+				ScreenPosition.X - EnemyBarWidth * 0.5f,
+				ScreenPosition.Y,
+				EnemyBarWidth,
+				Enemy->IsElite() ? 10.0f : 7.0f,
+				Enemy->GetHealthComponent()->GetHealthNormalized(),
+				Enemy->IsAttackWindingUp()
+					? FLinearColor(1.0f, 0.34f, 0.015f)
+					: FLinearColor(0.68f, 0.018f, 0.012f));
+
+			if (Enemy->IsElite())
+			{
+				DrawText(
+					TEXT("BONE WARDEN"),
+					FLinearColor(0.92f, 0.55f, 0.18f),
+					ScreenPosition.X,
+					ScreenPosition.Y - 18.0f,
+					GEngine->GetSmallFont(),
+					0.85f,
+					true);
+			}
+		}
+	}
 
 	DrawBar(Margin, Bottom, BarWidth, 24.0f, Health->GetHealthNormalized(), FLinearColor(0.62f, 0.025f, 0.018f));
 	DrawText(
