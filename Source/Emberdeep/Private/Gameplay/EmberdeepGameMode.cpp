@@ -124,9 +124,11 @@ void AEmberdeepGameMode::SpawnBlock(
 	}
 
 	UStaticMeshComponent* MeshComponent = Block->GetStaticMeshComponent();
+	// Runtime-generated actors start with Static mobility. Unreal rejects mesh
+	// assignment on a registered Static component, so make it movable first.
+	MeshComponent->SetMobility(EComponentMobility::Movable);
 	MeshComponent->SetStaticMesh(CubeMesh);
 	MeshComponent->SetWorldScale3D(Scale);
-	MeshComponent->SetMobility(EComponentMobility::Static);
 	MeshComponent->SetCollisionProfileName(TEXT("BlockAll"));
 	if (BlockMaterial)
 	{
