@@ -22,10 +22,13 @@ The current slice contains:
 - fixed orthographic near-isometric camera;
 - playable code-instanced Thorgrim visual with a chunky voxel-built silhouette;
 - screen-relative WASD movement and invulnerable dodge;
-- basic and heavy melee attacks with alternating swings, short lunges, cooldowns, and directional knockback;
+- a three-hit basic combo plus heavy melee attack with alternating swings, short lunges,
+  distinct timing/damage, cooldowns, and directional knockback;
 - two skeletons and a tier-scaled elite Bone Warden with proximity aggro and party-visible attack warnings;
 - client-only impact shards, expanding shockwaves, weapon trails, dodge dust, damage numbers,
   brief impact lighting, hit flashes, and local camera punch layered over authoritative combat;
+- deterministic spatial swing, impact, bone-break, enemy-warning, dodge, and hurt audio
+  with replaceable source files under `SourceAssets/Audio`;
 - health, death, automatic encounter restart, and readable defeat bursts;
 - dropped gold plus server-owned enemy, cache, and reward-chest loot;
 - `F` interaction prompts and a shared WoW-style clickable loot window;

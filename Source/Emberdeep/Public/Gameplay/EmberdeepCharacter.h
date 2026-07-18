@@ -9,6 +9,7 @@ class UEmberdeepHealthComponent;
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class USceneComponent;
+class USoundBase;
 class USpringArmComponent;
 
 UCLASS()
@@ -65,7 +66,7 @@ private:
 	void Dodge();
 	void RequestAttack(bool bHeavyAttack);
 	void ExecuteAttack(bool bHeavyAttack, const FVector& AttackDirection);
-	void PlayAttackVisual(bool bHeavyAttack, int32 HitCount);
+	void PlayAttackVisual(bool bHeavyAttack, int32 HitCount, int32 ComboStep);
 	void PlayHurtVisual(float Damage, bool bFatal);
 	void StartLocalCameraShake(float Strength, float Duration);
 	void UpdateLocalCameraShake(float DeltaSeconds);
@@ -82,7 +83,7 @@ private:
 	void ServerPerformAttack(bool bHeavyAttack, FVector_NetQuantizeNormal RequestedAimDirection);
 
 	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastPlayAttackVisual(bool bHeavyAttack, int32 HitCount);
+	void MulticastPlayAttackVisual(bool bHeavyAttack, int32 HitCount, int32 ComboStep);
 
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayDodgeVisual(FVector_NetQuantizeNormal DodgeDirection);
@@ -119,6 +120,21 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UEmberdeepHealthComponent> HealthComponent;
 
+	UPROPERTY()
+	TObjectPtr<USoundBase> LightSwingSound;
+
+	UPROPERTY()
+	TObjectPtr<USoundBase> HeavySwingSound;
+
+	UPROPERTY()
+	TObjectPtr<USoundBase> HeavyImpactSound;
+
+	UPROPERTY()
+	TObjectPtr<USoundBase> DodgeSound;
+
+	UPROPERTY()
+	TObjectPtr<USoundBase> PlayerHurtSound;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Combat")
 	float BasicAttackCooldown = 0.38f;
 
@@ -144,6 +160,7 @@ private:
 	FVector_NetQuantizeNormal ReplicatedAimDirection = FVector::ForwardVector;
 
 	float NextAttackTime = 0.0f;
+	float LastBasicAttackTime = -10.0f;
 	float NextDodgeTime = 0.0f;
 	float NextAimReplicationTime = 0.0f;
 	float TargetOrthoWidth = 1100.0f;
@@ -153,6 +170,7 @@ private:
 	FVector LastSentAimDirection = FVector::ForwardVector;
 	bool bInvulnerable = false;
 	int32 AttackVisualSequence = 0;
+	int32 BasicComboStep = 0;
 	FRotator ThorgrimAxeRestingRotation;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;

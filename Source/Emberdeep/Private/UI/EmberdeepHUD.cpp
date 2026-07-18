@@ -47,6 +47,20 @@ void AEmberdeepHUD::DrawHUD()
 	DrawMinimapAndObjective();
 	DrawActionBar(Character);
 
+	const float HealthNormalized = Character->GetHealthComponent()->GetHealthNormalized();
+	if (HealthNormalized > 0.0f && HealthNormalized < 0.32f)
+	{
+		const float Severity = 1.0f - HealthNormalized / 0.32f;
+		const float Pulse = 0.5f + 0.5f * FMath::Sin(GetWorld()->GetTimeSeconds() * 5.5f);
+		const float Alpha = (0.08f + Pulse * 0.12f) * Severity;
+		const float Border = 10.0f + Severity * 14.0f;
+		const FLinearColor WarningColor(0.72f, 0.006f, 0.002f, Alpha);
+		DrawRect(WarningColor, 0.0f, 0.0f, Canvas->ClipX, Border);
+		DrawRect(WarningColor, 0.0f, Canvas->ClipY - Border, Canvas->ClipX, Border);
+		DrawRect(WarningColor, 0.0f, Border, Border, Canvas->ClipY - Border * 2.0f);
+		DrawRect(WarningColor, Canvas->ClipX - Border, Border, Border, Canvas->ClipY - Border * 2.0f);
+	}
+
 	FString InteractionPrompt;
 	if (const AEmberdeepPlayerController* EmberdeepController = Cast<AEmberdeepPlayerController>(PlayerOwner);
 		EmberdeepController && EmberdeepController->GetClosestInteractionPrompt(InteractionPrompt))

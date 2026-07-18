@@ -16,9 +16,11 @@
 #include "Gameplay/EmberdeepEnemy.h"
 #include "Gameplay/EmberdeepGameMode.h"
 #include "Gameplay/EmberdeepPlayerState.h"
+#include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Net/UnrealNetwork.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Visual/EmberdeepVoxelStyle.h"
@@ -296,6 +298,22 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 
 	HealthComponent = CreateDefaultSubobject<UEmberdeepHealthComponent>(TEXT("HealthComponent"));
 	HealthComponent->SetMaxHealth(190.0f);
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> LightSwingAsset(
+		TEXT("/Game/Emberdeep/Audio/S_FighterSwingLight.S_FighterSwingLight"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> HeavySwingAsset(
+		TEXT("/Game/Emberdeep/Audio/S_FighterSwingHeavy.S_FighterSwingHeavy"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> HeavyImpactAsset(
+		TEXT("/Game/Emberdeep/Audio/S_HeavyImpact.S_HeavyImpact"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> DodgeAsset(
+		TEXT("/Game/Emberdeep/Audio/S_Dodge.S_Dodge"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> PlayerHurtAsset(
+		TEXT("/Game/Emberdeep/Audio/S_PlayerHurt.S_PlayerHurt"));
+	LightSwingSound = LightSwingAsset.Object;
+	HeavySwingSound = HeavySwingAsset.Object;
+	HeavyImpactSound = HeavyImpactAsset.Object;
+	DodgeSound = DodgeAsset.Object;
+	PlayerHurtSound = PlayerHurtAsset.Object;
 }
 
 void AEmberdeepCharacter::Tick(float DeltaSeconds)
@@ -543,19 +561,36 @@ void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& Attack
 		return;
 	}
 
+	const float Now = GetWorld()->GetTimeSeconds();
+	int32 ComboStep = INDEX_NONE;
+	if (bHeavyAttack)
+	{
+		BasicComboStep = 0;
+		LastBasicAttackTime = -10.0f;
+	}
+	else
+	{
+		BasicComboStep = Now - LastBasicAttackTime > 0.82f ? 0 : (BasicComboStep + 1) % 3;
+		LastBasicAttackTime = Now;
+		ComboStep = BasicComboStep;
+	}
+	const bool bComboFinisher = !bHeavyAttack && ComboStep == 2;
 	const float EquipmentDamage = GetEquipmentDamageBonus();
-	const float Damage = bHeavyAttack ? 62.0f + EquipmentDamage * 1.4f : 34.0f + EquipmentDamage;
-	const float Radius = bHeavyAttack ? 155.0f : 105.0f;
-	const float Reach = bHeavyAttack ? 125.0f : 105.0f;
-	const float KnockbackStrength = bHeavyAttack ? 620.0f : 260.0f;
-	const float Cooldown = bHeavyAttack ? HeavyAttackCooldown : BasicAttackCooldown;
+	const float ComboDamageScale = ComboStep == 1 ? 1.08f : bComboFinisher ? 1.28f : 1.0f;
+	const float Damage = bHeavyAttack
+		? 62.0f + EquipmentDamage * 1.4f
+		: (34.0f + EquipmentDamage) * ComboDamageScale;
+	const float Radius = bHeavyAttack ? 155.0f : bComboFinisher ? 126.0f : 105.0f;
+	const float Reach = bHeavyAttack ? 125.0f : bComboFinisher ? 120.0f : 105.0f;
+	const float KnockbackStrength = bHeavyAttack ? 620.0f : bComboFinisher ? 410.0f : 260.0f;
+	const float Cooldown = bHeavyAttack ? HeavyAttackCooldown : bComboFinisher ? 0.50f : BasicAttackCooldown;
 	const FVector SafeAttackDirection = AttackDirection.GetSafeNormal2D();
 	if (SafeAttackDirection.IsNearlyZero())
 	{
 		return;
 	}
 
-	NextAttackTime = GetWorld()->GetTimeSeconds() + Cooldown;
+	NextAttackTime = Now + Cooldown;
 	ReplicatedAimDirection = SafeAttackDirection;
 	SetActorRotation(SafeAttackDirection.Rotation());
 	LaunchCharacter(SafeAttackDirection * (bHeavyAttack ? 145.0f : 85.0f), false, false);
@@ -589,17 +624,18 @@ void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& Attack
 		DamageEvent.ShotDirection = SafeAttackDirection * KnockbackStrength;
 		Target->TakeDamage(Damage, DamageEvent, GetController(), this);
 	}
-	MulticastPlayAttackVisual(bHeavyAttack, DamagedActors.Num());
+	MulticastPlayAttackVisual(bHeavyAttack, DamagedActors.Num(), ComboStep);
 
 	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_COMBAT FighterAttack Type=%s Damage=%.0f Hits=%d"),
 		bHeavyAttack ? TEXT("Heavy") : TEXT("Basic"), Damage, DamagedActors.Num());
 }
 
-void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack, int32 HitCount)
+void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack, int32 HitCount, int32 ComboStep)
 {
-	const float SwingDegrees = bHeavyAttack ? 125.0f : 85.0f;
+	const bool bComboFinisher = !bHeavyAttack && ComboStep == 2;
+	const float SwingDegrees = bHeavyAttack ? 125.0f : bComboFinisher ? 108.0f : 85.0f;
 	const float SwingDuration = bHeavyAttack ? 0.20f : 0.13f;
-	const float SwingDirection = bHeavyAttack || (++AttackVisualSequence % 2 == 0) ? 1.0f : -1.0f;
+	const float SwingDirection = bHeavyAttack || ComboStep % 2 == 1 ? 1.0f : -1.0f;
 	ThorgrimAxeRoot->SetRelativeRotation(
 		ThorgrimAxeRestingRotation + FRotator(0.0f, 0.0f, SwingDegrees * SwingDirection));
 
@@ -608,8 +644,26 @@ void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack, int32 HitCount)
 		GetWorld(),
 		GetActorLocation() + Forward * (bHeavyAttack ? 145.0f : 110.0f) + FVector(0.0f, 0.0f, 55.0f),
 		Forward,
-		bHeavyAttack,
+		bHeavyAttack || bComboFinisher,
 		HitCount > 0);
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		USoundBase* SwingSound = bHeavyAttack ? HeavySwingSound : LightSwingSound;
+		if (SwingSound)
+		{
+			const float Pitch = bHeavyAttack ? 0.88f : 0.92f + FMath::Max(0, ComboStep) * 0.08f;
+			UGameplayStatics::PlaySoundAtLocation(this, SwingSound, GetActorLocation(), 0.72f, Pitch);
+		}
+		if (HitCount > 0 && (bHeavyAttack || bComboFinisher) && HeavyImpactSound)
+		{
+			UGameplayStatics::PlaySoundAtLocation(
+				this,
+				HeavyImpactSound,
+				GetActorLocation() + Forward * 110.0f,
+				0.82f,
+				bHeavyAttack ? 0.88f : 1.06f);
+		}
+	}
 	if (IsLocallyControlled() && HitCount > 0)
 	{
 		StartLocalCameraShake(bHeavyAttack ? 8.5f : 4.5f, bHeavyAttack ? 0.19f : 0.11f);
@@ -635,14 +689,18 @@ void AEmberdeepCharacter::ServerPerformAttack_Implementation(
 	ExecuteAttack(bHeavyAttack, FVector(RequestedAimDirection));
 }
 
-void AEmberdeepCharacter::MulticastPlayAttackVisual_Implementation(bool bHeavyAttack, int32 HitCount)
+void AEmberdeepCharacter::MulticastPlayAttackVisual_Implementation(bool bHeavyAttack, int32 HitCount, int32 ComboStep)
 {
-	PlayAttackVisual(bHeavyAttack, HitCount);
+	PlayAttackVisual(bHeavyAttack, HitCount, ComboStep);
 }
 
 void AEmberdeepCharacter::MulticastPlayDodgeVisual_Implementation(FVector_NetQuantizeNormal DodgeDirection)
 {
 	AEmberdeepCombatFeedback::SpawnDodge(GetWorld(), GetActorLocation(), FVector(DodgeDirection));
+	if (GetNetMode() != NM_DedicatedServer && DodgeSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, DodgeSound, GetActorLocation(), 0.62f, 1.0f);
+	}
 }
 
 void AEmberdeepCharacter::ServerDodge_Implementation(FVector_NetQuantizeNormal RequestedDodgeDirection)
@@ -705,6 +763,15 @@ void AEmberdeepCharacter::PlayHurtVisual(float Damage, bool bFatal)
 		}
 	}
 	AEmberdeepCombatFeedback::SpawnPlayerHurt(GetWorld(), GetActorLocation(), Damage, bFatal);
+	if (GetNetMode() != NM_DedicatedServer && PlayerHurtSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			this,
+			PlayerHurtSound,
+			GetActorLocation(),
+			bFatal ? 0.92f : 0.64f,
+			bFatal ? 0.78f : 1.0f);
+	}
 	if (IsLocallyControlled())
 	{
 		StartLocalCameraShake(bFatal ? 13.0f : 7.0f, bFatal ? 0.30f : 0.16f);

@@ -15,6 +15,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Visual/EmberdeepVoxelStyle.h"
@@ -119,6 +120,16 @@ AEmberdeepEnemy::AEmberdeepEnemy()
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	AttackTelegraph->SetStaticMesh(CylinderMesh.Object);
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> BoneHitAsset(
+		TEXT("/Game/Emberdeep/Audio/S_BoneHit.S_BoneHit"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> EnemyWindupAsset(
+		TEXT("/Game/Emberdeep/Audio/S_EnemyWindup.S_EnemyWindup"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> EnemyDeathAsset(
+		TEXT("/Game/Emberdeep/Audio/S_EnemyDeath.S_EnemyDeath"));
+	BoneHitSound = BoneHitAsset.Object;
+	EnemyWindupSound = EnemyWindupAsset.Object;
+	EnemyDeathSound = EnemyDeathAsset.Object;
 }
 
 void AEmberdeepEnemy::BeginPlay()
@@ -315,6 +326,19 @@ void AEmberdeepEnemy::MulticastPlayHitFeedback_Implementation(
 		FVector(HitDirection),
 		Damage,
 		bFatal);
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		USoundBase* ImpactSound = bFatal ? EnemyDeathSound : BoneHitSound;
+		if (ImpactSound)
+		{
+			UGameplayStatics::PlaySoundAtLocation(
+				this,
+				ImpactSound,
+				GetActorLocation(),
+				bFatal ? 0.88f : 0.68f,
+				bFatal ? 0.86f : FMath::FRandRange(0.94f, 1.08f));
+		}
+	}
 	if (!bFatal)
 	{
 		FTimerHandle FlashTimer;
@@ -329,6 +353,15 @@ void AEmberdeepEnemy::MulticastSetAttackTelegraph_Implementation(bool bVisible, 
 		? FVector(3.2f, 3.2f, 0.025f)
 		: FVector(2.05f, 2.05f, 0.020f));
 	AttackTelegraph->SetHiddenInGame(!bVisible);
+	if (bVisible && GetNetMode() != NM_DedicatedServer && EnemyWindupSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			this,
+			EnemyWindupSound,
+			GetActorLocation(),
+			bEliteAttack ? 0.72f : 0.42f,
+			bEliteAttack ? 0.72f : 1.18f);
+	}
 }
 
 void AEmberdeepEnemy::ResetHitFlash()
