@@ -213,6 +213,14 @@ void AEmberdeepGameMode::ClearCurrentStage()
 	}
 	CurrentEnvironment = nullptr;
 
+	// The Entry map can still contain prototype enemies placed before the staged
+	// run loop existed. Treat enemies as disposable stage content so the camp is
+	// always a genuinely safe hub, even when opening an older saved map.
+	for (TActorIterator<AEmberdeepEnemy> EnemyIt(GetWorld()); EnemyIt; ++EnemyIt)
+	{
+		EnemyIt->Destroy();
+	}
+
 	for (TActorIterator<AEmberdeepGoldPickup> PickupIt(GetWorld()); PickupIt; ++PickupIt)
 	{
 		PickupIt->Destroy();
