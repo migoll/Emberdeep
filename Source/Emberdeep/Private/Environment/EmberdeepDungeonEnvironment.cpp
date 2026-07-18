@@ -461,10 +461,13 @@ AEmberdeepDungeonEnvironment::AEmberdeepDungeonEnvironment()
 
 	const FVector TorchLocations[] =
 	{
-		FVector(-472.0f, -616.0f, 218.0f),
-		FVector(472.0f, -616.0f, 218.0f),
-		FVector(-472.0f, 616.0f, 218.0f),
-		FVector(472.0f, 616.0f, 218.0f)
+		// Keep the actual emitter in front of the wall. A point light embedded in
+		// the voxel masonry gets clipped by individual blocks and projects large,
+		// rectangular wedges across the room.
+		FVector(-472.0f, -552.0f, 218.0f),
+		FVector(472.0f, -552.0f, 218.0f),
+		FVector(-472.0f, 552.0f, 218.0f),
+		FVector(472.0f, 552.0f, 218.0f)
 	};
 	for (int32 TorchIndex = 0; TorchIndex < UE_ARRAY_COUNT(TorchLocations); ++TorchIndex)
 	{
@@ -473,12 +476,16 @@ AEmberdeepDungeonEnvironment::AEmberdeepDungeonEnvironment()
 		TorchLight->SetupAttachment(DungeonRoot);
 		TorchLight->SetRelativeLocation(TorchLocations[TorchIndex]);
 		TorchLight->SetMobility(EComponentMobility::Movable);
-		TorchLight->SetIntensity(65000.0f);
-		TorchLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 105, 35)));
-		TorchLight->SetAttenuationRadius(720.0f);
-		TorchLight->SetSourceRadius(12.0f);
-		TorchLight->SetSoftSourceRadius(4.0f);
-		TorchLight->SetCastShadows(true);
+		TorchLight->SetIntensity(18000.0f);
+		TorchLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 151, 72)));
+		TorchLight->SetAttenuationRadius(460.0f);
+		TorchLight->SetSourceRadius(72.0f);
+		TorchLight->SetSoftSourceRadius(110.0f);
+		// The voxel walls are built from many small instanced cubes. Dynamic point
+		// light shadows make each cube silhouette read as a lighting defect. The
+		// moon key still casts the room-scale shadows; these local lights provide
+		// the soft amber pool around each visible flame.
+		TorchLight->SetCastShadows(false);
 		LocalLights.Add(TorchLight);
 	}
 
