@@ -48,6 +48,7 @@ protected:
 private:
 	void MoveForward(float Value);
 	void MoveRight(float Value);
+	void ZoomCamera(float Value);
 	void UpdateMouseAim();
 	void BasicAttack();
 	void HeavyAttack();
@@ -103,6 +104,18 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Combat")
 	float DodgeCooldown = 1.0f;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Camera|Zoom")
+	float MinimumOrthoWidth = 420.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Camera|Zoom")
+	float MaximumOrthoWidth = 1550.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Camera|Zoom")
+	float ZoomStep = 140.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Camera|Zoom")
+	float ZoomInterpolationSpeed = 10.0f;
+
 	UPROPERTY(Replicated)
 	int32 Gold = 0;
 
@@ -121,6 +134,7 @@ private:
 	float NextAttackTime = 0.0f;
 	float NextDodgeTime = 0.0f;
 	float NextAimReplicationTime = 0.0f;
+	float TargetOrthoWidth = 1100.0f;
 	FVector LastSentAimDirection = FVector::ForwardVector;
 	bool bInvulnerable = false;
 	FRotator ThorgrimAxeRestingRotation;

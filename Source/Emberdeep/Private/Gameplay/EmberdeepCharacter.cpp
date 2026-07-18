@@ -186,6 +186,11 @@ void AEmberdeepCharacter::Tick(float DeltaSeconds)
 	if (IsLocallyControlled() && !IsDead())
 	{
 		UpdateMouseAim();
+		IsometricCamera->OrthoWidth = FMath::FInterpTo(
+			IsometricCamera->OrthoWidth,
+			TargetOrthoWidth,
+			DeltaSeconds,
+			ZoomInterpolationSpeed);
 	}
 }
 
@@ -225,6 +230,7 @@ void AEmberdeepCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 
 	PlayerInputComponent->BindAxis(TEXT("MoveForward"), this, &AEmberdeepCharacter::MoveForward);
 	PlayerInputComponent->BindAxis(TEXT("MoveRight"), this, &AEmberdeepCharacter::MoveRight);
+	PlayerInputComponent->BindAxis(TEXT("ZoomCamera"), this, &AEmberdeepCharacter::ZoomCamera);
 	PlayerInputComponent->BindAction(TEXT("BasicAttack"), IE_Pressed, this, &AEmberdeepCharacter::BasicAttack);
 	PlayerInputComponent->BindAction(TEXT("HeavyAttack"), IE_Pressed, this, &AEmberdeepCharacter::HeavyAttack);
 	PlayerInputComponent->BindAction(TEXT("Dodge"), IE_Pressed, this, &AEmberdeepCharacter::Dodge);
@@ -247,6 +253,18 @@ void AEmberdeepCharacter::MoveRight(float Value)
 		FVector ScreenRight = IsometricCamera->GetRightVector();
 		ScreenRight.Z = 0.0f;
 		AddMovementInput(ScreenRight.GetSafeNormal(), Value);
+	}
+}
+
+void AEmberdeepCharacter::ZoomCamera(float Value)
+{
+	if (!FMath::IsNearlyZero(Value))
+	{
+		// Positive wheel input zooms in; negative input zooms out.
+		TargetOrthoWidth = FMath::Clamp(
+			TargetOrthoWidth - Value * ZoomStep,
+			MinimumOrthoWidth,
+			MaximumOrthoWidth);
 	}
 }
 
