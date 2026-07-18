@@ -36,6 +36,13 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 	IsometricCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	IsometricCamera->ProjectionMode = ECameraProjectionMode::Orthographic;
 	IsometricCamera->OrthoWidth = 1350.0f;
+	IsometricCamera->PostProcessBlendWeight = 1.0f;
+	IsometricCamera->PostProcessSettings.bOverride_AutoExposureMethod = true;
+	IsometricCamera->PostProcessSettings.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
+	IsometricCamera->PostProcessSettings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
+	IsometricCamera->PostProcessSettings.AutoExposureApplyPhysicalCameraExposure = 0;
+	IsometricCamera->PostProcessSettings.bOverride_AutoExposureBias = true;
+	IsometricCamera->PostProcessSettings.AutoExposureBias = 0.0f;
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 

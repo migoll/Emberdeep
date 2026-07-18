@@ -11,5 +11,7 @@ class EMBERDEEP_API AEmberdeepPlayerController : public APlayerController
 
 public:
 	AEmberdeepPlayerController();
-};
 
+protected:
+	virtual void OnPossess(APawn* InPawn) override;
+};

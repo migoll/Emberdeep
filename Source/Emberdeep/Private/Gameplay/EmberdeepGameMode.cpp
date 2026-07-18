@@ -61,8 +61,10 @@ void AEmberdeepGameMode::SpawnBlockoutArena()
 		ExposureVolume->bUnbound = true;
 		ExposureVolume->Settings.bOverride_AutoExposureMethod = true;
 		ExposureVolume->Settings.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
+		ExposureVolume->Settings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
+		ExposureVolume->Settings.AutoExposureApplyPhysicalCameraExposure = 0;
 		ExposureVolume->Settings.bOverride_AutoExposureBias = true;
-		ExposureVolume->Settings.AutoExposureBias = 2.0f;
+		ExposureVolume->Settings.AutoExposureBias = 0.0f;
 	}
 
 	ADirectionalLight* MoonLight = GetWorld()->SpawnActor<ADirectionalLight>(
