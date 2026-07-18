@@ -67,6 +67,10 @@ AEmberdeepEnemy::AEmberdeepEnemy()
 	}
 
 	TSet<FIntVector> OccupiedCells;
+	const auto AddCell = [&OccupiedCells](int32 X, int32 Y, int32 Z)
+	{
+		OccupiedCells.Add(FIntVector(X, Y, Z));
+	};
 	const auto AddBox = [&OccupiedCells](const FIntVector& Min, const FIntVector& Max)
 	{
 		for (int32 Z = Min.Z; Z <= Max.Z; ++Z)
@@ -80,34 +84,64 @@ AEmberdeepEnemy::AEmberdeepEnemy()
 			}
 		}
 	};
-
-	// One actor-local 4 cm lattice. The silhouette is assembled from cell clusters;
-	// no individual voxel is scaled, stretched, or placed off-grid.
-	AddBox(FIntVector(-2, -2, -3), FIntVector(2, 2, 10)); // spine
-	for (int32 RibZ = 0; RibZ <= 9; RibZ += 3)
+	const auto AddBoneLine = [&AddBox](const FIntVector& Start, const FIntVector& End, int32 Steps)
 	{
-		const int32 HalfWidth = RibZ >= 6 ? 6 : 5;
-		AddBox(FIntVector(-2, -HalfWidth, RibZ), FIntVector(2, HalfWidth, RibZ + 1));
-	}
-	AddBox(FIntVector(-3, -5, -5), FIntVector(3, 5, -2)); // pelvis
-	AddBox(FIntVector(-4, -4, 12), FIntVector(3, 4, 20)); // skull
-	AddBox(FIntVector(-3, -3, 10), FIntVector(2, 3, 13)); // neck/jaw
+		for (int32 Step = 0; Step <= Steps; ++Step)
+		{
+			const float Alpha = static_cast<float>(Step) / static_cast<float>(FMath::Max(Steps, 1));
+			const FIntVector Point(
+				FMath::RoundToInt(FMath::Lerp(static_cast<float>(Start.X), static_cast<float>(End.X), Alpha)),
+				FMath::RoundToInt(FMath::Lerp(static_cast<float>(Start.Y), static_cast<float>(End.Y), Alpha)),
+				FMath::RoundToInt(FMath::Lerp(static_cast<float>(Start.Z), static_cast<float>(End.Z), Alpha)));
+			AddBox(Point + FIntVector(-1, -1, -1), Point);
+		}
+	};
 
+	// Sparse anatomy is the silhouette: separated shins, a ladder-like rib cage,
+	// long arms, oversized hands and a large skull. The old filled cuboids read as
+	// brown statues; these clusters remain unmistakably skeletal at isometric scale.
+	AddBox(FIntVector(-2, -6, -17), FIntVector(4, -2, -16));
+	AddBox(FIntVector(-2, 2, -17), FIntVector(4, 6, -16));
+	AddBoneLine(FIntVector(0, -4, -15), FIntVector(0, -4, -5), 10);
+	AddBoneLine(FIntVector(0, 4, -15), FIntVector(0, 4, -5), 10);
+	AddBox(FIntVector(-2, -6, -5), FIntVector(2, 6, -3));
+	AddBox(FIntVector(-1, -5, -2), FIntVector(1, -3, -1));
+	AddBox(FIntVector(-1, 3, -2), FIntVector(1, 5, -1));
+	AddBoneLine(FIntVector(0, 0, -2), FIntVector(0, 0, 8), 10);
+
+	for (int32 RibZ : {1, 4, 7})
+	{
+		const int32 HalfWidth = RibZ == 7 ? 7 : (RibZ == 4 ? 6 : 5);
+		AddBox(FIntVector(-1, -HalfWidth, RibZ), FIntVector(1, HalfWidth, RibZ + 1));
+		// Short front prongs give the chest depth without filling the cavity.
+		AddBox(FIntVector(2, -HalfWidth, RibZ), FIntVector(3, -HalfWidth + 1, RibZ + 1));
+		AddBox(FIntVector(2, HalfWidth - 1, RibZ), FIntVector(3, HalfWidth, RibZ + 1));
+	}
+	AddBox(FIntVector(-1, -8, 8), FIntVector(1, 8, 9));
 	for (const int32 Side : {-1, 1})
 	{
-		for (int32 Step = 0; Step < 13; ++Step)
+		AddBoneLine(FIntVector(0, Side * 8, 8), FIntVector(0, Side * 11, 2), 7);
+		AddBoneLine(FIntVector(0, Side * 11, 2), FIntVector(1, Side * 13, -4), 7);
+		const int32 HandMinY = Side < 0 ? -15 : 12;
+		const int32 HandMaxY = Side < 0 ? -12 : 15;
+		AddBox(FIntVector(-1, HandMinY, -6), FIntVector(2, HandMaxY, -3));
+	}
+
+	AddBox(FIntVector(-1, -2, 9), FIntVector(1, 2, 10));
+	AddBox(FIntVector(-1, -3, 9), FIntVector(3, 3, 11)); // jaw
+	for (int32 Z = 11; Z <= 18; ++Z)
+	{
+		for (int32 Y = -4; Y <= 4; ++Y)
 		{
-			const int32 Y = Side * (7 + Step / 3);
-			const int32 Z = 9 - Step;
-			AddBox(FIntVector(-2, Y - 1, Z - 1), FIntVector(1, Y + 1, Z + 1));
+			for (int32 X = -3; X <= 3; ++X)
+			{
+				const bool bSurface = X == -3 || X == 3 || Y == -4 || Y == 4 || Z == 11 || Z == 18;
+				if (bSurface)
+				{
+					AddCell(X, Y, Z);
+				}
+			}
 		}
-		for (int32 Step = 0; Step < 14; ++Step)
-		{
-			const int32 Y = Side * (3 + Step / 5);
-			const int32 Z = -6 - Step;
-			AddBox(FIntVector(-2, Y - 1, Z), FIntVector(1, Y + 1, Z + 1));
-		}
-		AddBox(FIntVector(-3, Side * 5 - 2, -21), FIntVector(3, Side * 5 + 2, -19));
 	}
 
 	TArray<FTransform> ShadeTransforms[EmberdeepVoxelStyle::ShadeCount];
@@ -129,7 +163,7 @@ AEmberdeepEnemy::AEmberdeepEnemy()
 	// rigid cluster, giving every skeleton a clear attack side and silhouette.
 	WeaponRoot = CreateDefaultSubobject<USceneComponent>(TEXT("WeaponRoot"));
 	WeaponRoot->SetupAttachment(EnemyVisualRoot);
-	WeaponRoot->SetRelativeLocation(FVector(8.0f, 42.0f, -4.0f));
+	WeaponRoot->SetRelativeLocation(FVector(4.0f, 48.0f, -18.0f));
 	WeaponRoot->SetRelativeRotation(FRotator(0.0f, 0.0f, 150.0f));
 
 	WeaponSteelVoxels = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("WeaponSteelVoxels"));
@@ -155,23 +189,27 @@ AEmberdeepEnemy::AEmberdeepEnemy()
 			EmberdeepVoxelStyle::CellCenter(X, Y, Z),
 			EmberdeepVoxelStyle::InstanceScale()));
 	};
-	for (int32 Z = -3; Z <= 3; ++Z)
+	for (int32 Z = -4; Z <= 3; ++Z)
 	{
-		AddWeaponCell(WeaponGripVoxels, 0, 0, Z);
+		for (int32 X = -1; X <= 0; ++X)
+		{
+			AddWeaponCell(WeaponGripVoxels, X, 0, Z);
+		}
 	}
-	for (int32 Y = -3; Y <= 3; ++Y)
+	for (int32 Y = -5; Y <= 5; ++Y)
 	{
 		AddWeaponCell(WeaponSteelVoxels, 0, Y, 4);
 	}
-	for (int32 Z = 5; Z <= 19; ++Z)
+	for (int32 Z = 5; Z <= 22; ++Z)
 	{
 		AddWeaponCell(WeaponSteelVoxels, 0, 0, Z);
-		if (Z <= 16)
+		if (Z <= 20)
 		{
 			AddWeaponCell(WeaponSteelVoxels, 1, 0, Z);
+			AddWeaponCell(WeaponSteelVoxels, 0, 1, Z);
 		}
 	}
-	AddWeaponCell(WeaponSteelVoxels, 0, 0, 20);
+	AddWeaponCell(WeaponSteelVoxels, 0, 0, 23);
 
 	AccentVoxels = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("EnemyAccentVoxels"));
 	AccentVoxels->SetupAttachment(EnemyVisualRoot);
@@ -181,8 +219,12 @@ AEmberdeepEnemy::AEmberdeepEnemy()
 	AccentVoxels->SetGenerateOverlapEvents(false);
 	AccentVoxels->SetCanEverAffectNavigation(false);
 	// Recessed dark eye sockets stop the pale skull from becoming a featureless box.
-	AddWeaponCell(AccentVoxels, 4, -2, 17);
-	AddWeaponCell(AccentVoxels, 4, 2, 17);
+	for (int32 EyeY : {-2, 2})
+	{
+		AddWeaponCell(AccentVoxels, 4, EyeY, 15);
+		AddWeaponCell(AccentVoxels, 4, EyeY, 16);
+	}
+	AddWeaponCell(AccentVoxels, 4, 0, 13);
 
 	AttackTelegraph = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("AttackTelegraph"));
 	AttackTelegraph->SetupAttachment(RootComponent);
@@ -207,13 +249,14 @@ void AEmberdeepEnemy::BeginPlay()
 	WeaponRestingLocation = WeaponRoot->GetRelativeLocation();
 	WeaponRestingRotation = WeaponRoot->GetRelativeRotation();
 
-	const FLinearColor BoneColor = FLinearColor::FromSRGBColor(FColor(144, 126, 92));
+	const FLinearColor BoneColor(0.72f, 0.54f, 0.29f);
 	for (int32 ShadeIndex = 0; ShadeIndex < BoneVoxelMeshes.Num(); ++ShadeIndex)
 	{
 		if (UMaterialInstanceDynamic* Material = BoneVoxelMeshes[ShadeIndex]->CreateDynamicMaterialInstance(0))
 		{
 			Material->SetVectorParameterValue(TEXT("Color"), EmberdeepVoxelStyle::ShadeColor(BoneColor, ShadeIndex));
-			Material->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.14f);
+			Material->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.48f);
+			BoneVoxelMeshes[ShadeIndex]->SetMaterial(0, Material);
 			BoneMaterials.Add(Material);
 		}
 	}
@@ -221,15 +264,17 @@ void AEmberdeepEnemy::BeginPlay()
 	if (WeaponSteelMaterial)
 	{
 		WeaponSteelMaterial->SetVectorParameterValue(
-			TEXT("Color"), FLinearColor::FromSRGBColor(FColor(93, 102, 111)));
-		WeaponSteelMaterial->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.12f);
+			TEXT("Color"), FLinearColor(0.28f, 0.35f, 0.43f));
+		WeaponSteelMaterial->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.40f);
+		WeaponSteelVoxels->SetMaterial(0, WeaponSteelMaterial);
 	}
 	WeaponGripMaterial = WeaponGripVoxels->CreateDynamicMaterialInstance(0);
 	if (WeaponGripMaterial)
 	{
 		WeaponGripMaterial->SetVectorParameterValue(
-			TEXT("Color"), FLinearColor::FromSRGBColor(FColor(78, 47, 28)));
-		WeaponGripMaterial->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.10f);
+			TEXT("Color"), FLinearColor(0.13f, 0.045f, 0.012f));
+		WeaponGripMaterial->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.30f);
+		WeaponGripVoxels->SetMaterial(0, WeaponGripMaterial);
 	}
 	AccentMaterial = AccentVoxels->CreateDynamicMaterialInstance(0);
 	if (AccentMaterial)
@@ -237,6 +282,7 @@ void AEmberdeepEnemy::BeginPlay()
 		AccentMaterial->SetVectorParameterValue(
 			TEXT("Color"), FLinearColor::FromSRGBColor(FColor(13, 10, 9)));
 		AccentMaterial->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.05f);
+		AccentVoxels->SetMaterial(0, AccentMaterial);
 	}
 
 	if (UMaterialInstanceDynamic* TelegraphMaterial = AttackTelegraph->CreateDynamicMaterialInstance(0))
@@ -554,8 +600,8 @@ void AEmberdeepEnemy::MulticastSetAttackTelegraph_Implementation(bool bVisible, 
 void AEmberdeepEnemy::ResetHitFlash()
 {
 	ApplyBoneColor(bIsElite
-		? FLinearColor::FromSRGBColor(FColor(118, 55, 35))
-		: FLinearColor::FromSRGBColor(FColor(144, 126, 92)));
+		? FLinearColor(0.62f, 0.10f, 0.025f)
+		: FLinearColor(0.72f, 0.54f, 0.29f));
 }
 
 void AEmberdeepEnemy::ApplyBoneColor(const FLinearColor& Color)
@@ -574,15 +620,15 @@ void AEmberdeepEnemy::ApplyEnemyStyle()
 	// cell and break the common world lattice. Palette and weapon contrast carry it.
 	SetActorScale3D(FVector::OneVector);
 	ApplyBoneColor(bIsElite
-		? FLinearColor::FromSRGBColor(FColor(118, 55, 35))
-		: FLinearColor::FromSRGBColor(FColor(144, 126, 92)));
+		? FLinearColor(0.62f, 0.10f, 0.025f)
+		: FLinearColor(0.72f, 0.54f, 0.29f));
 	if (WeaponSteelMaterial)
 	{
 		WeaponSteelMaterial->SetVectorParameterValue(
 			TEXT("Color"),
 			bIsElite
-				? FLinearColor::FromSRGBColor(FColor(174, 72, 34))
-				: FLinearColor::FromSRGBColor(FColor(93, 102, 111)));
+				? FLinearColor(0.78f, 0.11f, 0.025f)
+				: FLinearColor(0.28f, 0.35f, 0.43f));
 	}
 }
 

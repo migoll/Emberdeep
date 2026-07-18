@@ -50,13 +50,13 @@ namespace
 		UE_ARRAY_COUNT(GRewardPaletteDefinitions) == static_cast<int32>(ERewardPalette::Count),
 		"Every reward-room palette entry must have a material definition.");
 
-	int32 PositiveModulo(int32 Value, int32 Divisor)
+	int32 PositiveRewardModulo(int32 Value, int32 Divisor)
 	{
 		const int32 Result = Value % Divisor;
 		return Result < 0 ? Result + Divisor : Result;
 	}
 
-	uint32 HashCell(int32 X, int32 Y, int32 Z, int32 Seed)
+	uint32 HashRewardCell(int32 X, int32 Y, int32 Z, int32 Seed)
 	{
 		uint32 Hash = 2166136261u;
 		Hash = (Hash ^ static_cast<uint32>(X)) * 16777619u;
@@ -139,16 +139,16 @@ namespace
 		TSet<FIntVector> OccupiedCells;
 	};
 
-	ERewardPalette SelectMasonryPalette(int32 Along, int32 Z, int32 Seed)
+	ERewardPalette SelectRewardMasonryPalette(int32 Along, int32 Z, int32 Seed)
 	{
-		const int32 BrickRow = PositiveModulo(Z - 1, 8);
+		const int32 BrickRow = PositiveRewardModulo(Z - 1, 8);
 		const int32 RowOffset = ((Z - 1) / 8 & 1) != 0 ? 8 : 0;
-		const int32 BrickColumn = PositiveModulo(Along + RowOffset, 16);
+		const int32 BrickColumn = PositiveRewardModulo(Along + RowOffset, 16);
 		if (BrickRow == 0 || BrickColumn == 0)
 		{
 			return ERewardPalette::WallDark;
 		}
-		return HashCell(Along / 4, Z / 4, Seed, 37) % 14u < 3u
+		return HashRewardCell(Along / 4, Z / 4, Seed, 37) % 14u < 3u
 			? ERewardPalette::WallDark
 			: ERewardPalette::WallStone;
 	}
@@ -164,10 +164,10 @@ namespace
 			const int32 RowOffset = (SlabRow & 1) != 0 ? 6 : 0;
 			for (int32 X = -150; X <= 149; ++X)
 			{
-				const int32 LocalX = PositiveModulo(X + 150 + RowOffset, 12);
-				const int32 LocalY = PositiveModulo(Y + 112, 10);
+				const int32 LocalX = PositiveRewardModulo(X + 150 + RowOffset, 12);
+				const int32 LocalY = PositiveRewardModulo(Y + 112, 10);
 				const bool bMortar = LocalX == 0 || LocalY == 0;
-				const bool bWorn = HashCell(X / 5, Y / 5, 0, 13) % 31u == 0u;
+				const bool bWorn = HashRewardCell(X / 5, Y / 5, 0, 13) % 31u == 0u;
 				Builder.AddCell(bMortar || bWorn ? ERewardPalette::FloorDark : ERewardPalette::FloorMid, X, Y, 0);
 			}
 		}
@@ -178,7 +178,7 @@ namespace
 			const int32 HalfWidth = 11 + ((Y + 74) / 26);
 			for (int32 X = -HalfWidth; X <= HalfWidth; ++X)
 			{
-				if (FMath::Abs(X) == HalfWidth || PositiveModulo(Y, 18) != 0 || FMath::Abs(X) > 2)
+				if (FMath::Abs(X) == HalfWidth || PositiveRewardModulo(Y, 18) != 0 || FMath::Abs(X) > 2)
 				{
 					Builder.AddCell(ERewardPalette::Crimson, X, Y, 1);
 				}
@@ -199,7 +199,7 @@ namespace
 					const bool bSurface = X == -150 || X == 149 || Y == -112 || Y == -103 || Z == 1 || Z == 70;
 					if (!bDoorOpening && bSurface)
 					{
-						Builder.AddCell(SelectMasonryPalette(X, Z, 3), X, Y, Z);
+						Builder.AddCell(SelectRewardMasonryPalette(X, Z, 3), X, Y, Z);
 					}
 				}
 			}
@@ -225,7 +225,7 @@ namespace
 					const bool bSurface = X == 140 || X == 149 || Y == -112 || Y == 112 || Z == 1 || Z == 70;
 					if (bSurface)
 					{
-						Builder.AddCell(SelectMasonryPalette(Y, Z, 7), X, Y, Z);
+						Builder.AddCell(SelectRewardMasonryPalette(Y, Z, 7), X, Y, Z);
 					}
 				}
 			}
@@ -237,14 +237,14 @@ namespace
 		for (int32 X = -150; X <= 149; ++X)
 		{
 			const int32 Segment = FMath::FloorToInt(static_cast<float>(X + 150) / 16.0f);
-			const int32 Height = 13 + static_cast<int32>(HashCell(Segment, 0, 0, 17) % 10u);
+			const int32 Height = 13 + static_cast<int32>(HashRewardCell(Segment, 0, 0, 17) % 10u);
 			for (int32 Y = 103; Y <= 112; ++Y)
 			{
 				for (int32 Z = 1; Z <= Height; ++Z)
 				{
 					if (Y == 103 || Y == 112 || Z == 1 || Z == Height)
 					{
-						Builder.AddCell(SelectMasonryPalette(X, Z, 19), X, Y, Z);
+						Builder.AddCell(SelectRewardMasonryPalette(X, Z, 19), X, Y, Z);
 					}
 				}
 			}
@@ -253,14 +253,14 @@ namespace
 		for (int32 Y = -112; Y <= 112; ++Y)
 		{
 			const int32 Segment = FMath::FloorToInt(static_cast<float>(Y + 112) / 16.0f);
-			const int32 Height = 12 + static_cast<int32>(HashCell(Segment, 0, 0, 23) % 10u);
+			const int32 Height = 12 + static_cast<int32>(HashRewardCell(Segment, 0, 0, 23) % 10u);
 			for (int32 X = -150; X <= -141; ++X)
 			{
 				for (int32 Z = 1; Z <= Height; ++Z)
 				{
 					if (X == -150 || X == -141 || Z == 1 || Z == Height)
 					{
-						Builder.AddCell(SelectMasonryPalette(Y, Z, 29), X, Y, Z);
+						Builder.AddCell(SelectRewardMasonryPalette(Y, Z, 29), X, Y, Z);
 					}
 				}
 			}
@@ -355,11 +355,11 @@ namespace
 			const bool bSide = (DebrisIndex & 1) == 0;
 			const int32 X = bSide
 				? (DebrisIndex % 4 < 2 ? -137 : 133)
-				: -128 + static_cast<int32>(HashCell(DebrisIndex, 1, 0, 61) % 256u);
+				: -128 + static_cast<int32>(HashRewardCell(DebrisIndex, 1, 0, 61) % 256u);
 			const int32 Y = bSide
-				? -92 + static_cast<int32>(HashCell(DebrisIndex, 2, 0, 67) % 176u)
+				? -92 + static_cast<int32>(HashRewardCell(DebrisIndex, 2, 0, 67) % 176u)
 				: (DebrisIndex % 4 < 2 ? -94 : 94);
-			const int32 Radius = 1 + static_cast<int32>(HashCell(DebrisIndex, 3, 0, 71) % 3u);
+			const int32 Radius = 1 + static_cast<int32>(HashRewardCell(DebrisIndex, 3, 0, 71) % 3u);
 			Builder.AddSurfaceBox(
 				DebrisIndex % 4 == 0 ? ERewardPalette::Bone : ERewardPalette::WallStone,
 				FIntVector(X - Radius, Y - Radius, 1),

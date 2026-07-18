@@ -38,12 +38,13 @@ namespace
 		Night,
 		Steel,
 		Ash,
-		Bone,
+		Brass,
 		Hide,
 		Fur,
 		Skin,
 		Wood,
-		Cloth
+		Cloth,
+		Crimson
 	};
 
 	struct FThorgrimPartDefinition
@@ -78,23 +79,25 @@ namespace
 	const FThorgrimPaletteDefinition GThorgrimPaletteDefinitions[] =
 	{
 		{ EThorgrimPalette::Night, TEXT("Night"), {
-			FLinearColor::FromSRGBColor(FColor(18, 25, 34)), FLinearColor::FromSRGBColor(FColor(24, 32, 43)), FLinearColor::FromSRGBColor(FColor(31, 42, 54)) } },
+			FLinearColor(0.006f, 0.010f, 0.016f), FLinearColor(0.014f, 0.022f, 0.034f), FLinearColor(0.025f, 0.040f, 0.060f) } },
 		{ EThorgrimPalette::Steel, TEXT("Steel"), {
-			FLinearColor::FromSRGBColor(FColor(68, 73, 79)), FLinearColor::FromSRGBColor(FColor(85, 90, 96)), FLinearColor::FromSRGBColor(FColor(112, 119, 126)) } },
+			FLinearColor(0.085f, 0.115f, 0.150f), FLinearColor(0.16f, 0.215f, 0.275f), FLinearColor(0.30f, 0.39f, 0.48f) } },
 		{ EThorgrimPalette::Ash, TEXT("Ash"), {
-			FLinearColor::FromSRGBColor(FColor(96, 93, 89)), FLinearColor::FromSRGBColor(FColor(119, 117, 114)), FLinearColor::FromSRGBColor(FColor(143, 139, 132)) } },
-		{ EThorgrimPalette::Bone, TEXT("Bone"), {
-			FLinearColor::FromSRGBColor(FColor(174, 156, 124)), FLinearColor::FromSRGBColor(FColor(210, 194, 162)), FLinearColor::FromSRGBColor(FColor(228, 213, 182)) } },
+			FLinearColor(0.22f, 0.25f, 0.28f), FLinearColor(0.36f, 0.40f, 0.44f), FLinearColor(0.56f, 0.61f, 0.64f) } },
+		{ EThorgrimPalette::Brass, TEXT("Brass"), {
+			FLinearColor(0.16f, 0.065f, 0.010f), FLinearColor(0.34f, 0.15f, 0.025f), FLinearColor(0.58f, 0.32f, 0.060f) } },
 		{ EThorgrimPalette::Hide, TEXT("Hide"), {
-			FLinearColor::FromSRGBColor(FColor(105, 70, 45)), FLinearColor::FromSRGBColor(FColor(138, 95, 60)), FLinearColor::FromSRGBColor(FColor(160, 112, 69)) } },
+			FLinearColor(0.12f, 0.045f, 0.018f), FLinearColor(0.25f, 0.10f, 0.035f), FLinearColor(0.39f, 0.18f, 0.065f) } },
 		{ EThorgrimPalette::Fur, TEXT("Fur"), {
-			FLinearColor::FromSRGBColor(FColor(54, 39, 32)), FLinearColor::FromSRGBColor(FColor(73, 55, 45)), FLinearColor::FromSRGBColor(FColor(94, 68, 50)) } },
+			FLinearColor(0.028f, 0.014f, 0.010f), FLinearColor(0.060f, 0.032f, 0.021f), FLinearColor(0.11f, 0.058f, 0.033f) } },
 		{ EThorgrimPalette::Skin, TEXT("Skin"), {
-			FLinearColor::FromSRGBColor(FColor(155, 90, 66)), FLinearColor::FromSRGBColor(FColor(184, 116, 84)), FLinearColor::FromSRGBColor(FColor(204, 137, 102)) } },
+			FLinearColor(0.25f, 0.075f, 0.040f), FLinearColor(0.43f, 0.15f, 0.075f), FLinearColor(0.62f, 0.26f, 0.13f) } },
 		{ EThorgrimPalette::Wood, TEXT("Wood"), {
-			FLinearColor::FromSRGBColor(FColor(60, 39, 29)), FLinearColor::FromSRGBColor(FColor(78, 53, 37)), FLinearColor::FromSRGBColor(FColor(96, 65, 42)) } },
+			FLinearColor(0.032f, 0.013f, 0.008f), FLinearColor(0.075f, 0.030f, 0.014f), FLinearColor(0.14f, 0.060f, 0.025f) } },
 		{ EThorgrimPalette::Cloth, TEXT("Cloth"), {
-			FLinearColor::FromSRGBColor(FColor(28, 40, 51)), FLinearColor::FromSRGBColor(FColor(36, 52, 66)), FLinearColor::FromSRGBColor(FColor(46, 65, 78)) } }
+			FLinearColor(0.012f, 0.027f, 0.050f), FLinearColor(0.025f, 0.060f, 0.11f), FLinearColor(0.055f, 0.12f, 0.20f) } },
+		{ EThorgrimPalette::Crimson, TEXT("Crimson"), {
+			FLinearColor(0.16f, 0.003f, 0.006f), FLinearColor(0.40f, 0.010f, 0.014f), FLinearColor(0.72f, 0.026f, 0.020f) } }
 	};
 
 	int32 PositiveModulo(int32 Value, int32 Divisor)
@@ -147,21 +150,16 @@ namespace
 
 		case EThorgrimPalette::Steel:
 		case EThorgrimPalette::Ash:
+		case EThorgrimPalette::Brass:
 			if (PositiveModulo(Voxel.X + Voxel.Y * 2 + Voxel.Z * 3, 17) == 0)
 			{
 				return 2;
 			}
 			return CellHash % 12u < 2u ? 0 : 1;
 
-		case EThorgrimPalette::Bone:
-			if (PositiveModulo(Voxel.X - Voxel.Y + Voxel.Z * 2, 19) == 0)
-			{
-				return 2;
-			}
-			return ClusterHash % 10u < 2u ? 0 : 1;
-
 		case EThorgrimPalette::Night:
 		case EThorgrimPalette::Cloth:
+		case EThorgrimPalette::Crimson:
 			if (PositiveModulo(Voxel.X + Voxel.Y + Voxel.Z, 15) == 0)
 			{
 				return 2;
@@ -185,8 +183,123 @@ namespace
 			+ ShadeIndex;
 	}
 
-#include "ThorgrimVoxelData.inl"
-	static_assert(GThorgrimVoxelUnitCm == EmberdeepVoxelStyle::UnitCm);
+	// Authored directly on the shared 4 cm lattice. This deliberately uses broad,
+	// readable clusters instead of thousands of noisy micro-voxels: helmet,
+	// shoulders, tabard, sword and shield must remain distinct at gameplay scale.
+	static const FVector GThorgrimAxePivot(0.0f, 48.0f, -16.0f);
+	static const FVector GThorgrimShieldPivot(0.0f, -48.0f, -16.0f);
+
+	TArray<FThorgrimVoxelCell> BuildThorgrimVoxelCells()
+	{
+		TMap<int64, FThorgrimVoxelCell> Cells;
+		const auto AddCell = [&Cells](EThorgrimPart Part, EThorgrimPalette Palette, int32 X, int32 Y, int32 Z)
+		{
+			const int64 Key =
+				(static_cast<int64>(Part) << 48)
+				| (static_cast<int64>(X + 128) << 32)
+				| (static_cast<int64>(Y + 128) << 16)
+				| static_cast<int64>(Z + 128);
+			Cells.Add(Key, FThorgrimVoxelCell{
+				Part, Palette, static_cast<int16>(X), static_cast<int16>(Y), static_cast<int16>(Z) });
+		};
+		const auto AddBox = [&AddCell](
+			EThorgrimPart Part,
+			EThorgrimPalette Palette,
+			const FIntVector& Min,
+			const FIntVector& Max)
+		{
+			for (int32 Z = Min.Z; Z <= Max.Z; ++Z)
+			{
+				for (int32 Y = Min.Y; Y <= Max.Y; ++Y)
+				{
+					for (int32 X = Min.X; X <= Max.X; ++X)
+					{
+						AddCell(Part, Palette, X, Y, Z);
+					}
+				}
+			}
+		};
+
+		// Planted boots and separated legs prevent the hero becoming a single lump.
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Night, FIntVector(-3, -6, -20), FIntVector(3, -2, -20));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Night, FIntVector(-3, 2, -20), FIntVector(3, 6, -20));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(-2, -6, -19), FIntVector(2, -2, -16));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(-2, 2, -19), FIntVector(2, 6, -16));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Cloth, FIntVector(-2, -5, -15), FIntVector(2, -2, -9));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Cloth, FIntVector(-2, 2, -15), FIntVector(2, 5, -9));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(3, -5, -14), FIntVector(4, -2, -12));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(3, 2, -14), FIntVector(4, 5, -12));
+
+		// Broad plated torso, oversized pauldrons and raised crimson cloth planes.
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(-3, -6, -8), FIntVector(3, 6, 7));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Night, FIntVector(-4, -6, -7), FIntVector(-4, 6, 6));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Crimson, FIntVector(4, -3, -8), FIntVector(4, 3, 3));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Brass, FIntVector(4, -4, 4), FIntVector(4, 4, 4));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Crimson, FIntVector(-5, -5, -5), FIntVector(-5, 5, 7));
+		for (const int32 Side : {-1, 1})
+		{
+			const int32 ShoulderMinY = Side < 0 ? -11 : 7;
+			const int32 ShoulderMaxY = Side < 0 ? -7 : 11;
+			AddBox(EThorgrimPart::Body, EThorgrimPalette::Ash,
+				FIntVector(-4, ShoulderMinY, 4), FIntVector(4, ShoulderMaxY, 10));
+			const int32 ArmMinY = Side < 0 ? -13 : 10;
+			const int32 ArmMaxY = Side < 0 ? -10 : 13;
+			AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel,
+				FIntVector(-2, ArmMinY, -3), FIntVector(2, ArmMaxY, 5));
+			const int32 HandMinY = Side < 0 ? -15 : 13;
+			const int32 HandMaxY = Side < 0 ? -13 : 15;
+			AddBox(EThorgrimPart::Body, EThorgrimPalette::Hide,
+				FIntVector(-1, HandMinY, -5), FIntVector(1, HandMaxY, -2));
+		}
+
+		// A compact great-helm with a black eye slit and a red crest is readable from
+		// every rotation, while the front planes still make facing obvious.
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Night, FIntVector(-2, -3, 8), FIntVector(2, 3, 10));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(-3, -5, 10), FIntVector(3, 5, 19));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Ash, FIntVector(4, -5, 16), FIntVector(4, 5, 19));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Night, FIntVector(4, -4, 14), FIntVector(4, 4, 15));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(4, -5, 10), FIntVector(4, -4, 13));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Steel, FIntVector(4, 4, 10), FIntVector(4, 5, 13));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Brass, FIntVector(5, -1, 11), FIntVector(5, 1, 13));
+		AddBox(EThorgrimPart::Body, EThorgrimPalette::Crimson, FIntVector(-1, -2, 20), FIntVector(1, 2, 23));
+
+		// Oversized sword: dark grip, brass guard, broad steel blade and pale edge.
+		AddBox(EThorgrimPart::Axe, EThorgrimPalette::Wood, FIntVector(-1, -1, -5), FIntVector(1, 1, 3));
+		AddBox(EThorgrimPart::Axe, EThorgrimPalette::Brass, FIntVector(-2, -2, -7), FIntVector(2, 2, -5));
+		AddBox(EThorgrimPart::Axe, EThorgrimPalette::Brass, FIntVector(-1, -6, 4), FIntVector(1, 6, 5));
+		AddBox(EThorgrimPart::Axe, EThorgrimPalette::Steel, FIntVector(-1, -2, 6), FIntVector(1, 2, 22));
+		AddBox(EThorgrimPart::Axe, EThorgrimPalette::Ash, FIntVector(2, -2, 7), FIntVector(2, 2, 21));
+		AddBox(EThorgrimPart::Axe, EThorgrimPalette::Ash, FIntVector(-1, -1, 23), FIntVector(1, 1, 24));
+
+		// Heater shield: thick gunmetal silhouette, brass rim and raised crimson mark.
+		for (int32 Z = -8; Z <= 8; ++Z)
+		{
+			const int32 HalfWidth = Z < -3 ? FMath::Clamp(Z + 9, 2, 6) : 6;
+			for (int32 Y = -HalfWidth; Y <= HalfWidth; ++Y)
+			{
+				for (int32 X = 0; X <= 2; ++X)
+				{
+					AddCell(EThorgrimPart::Shield, EThorgrimPalette::Steel, X, Y, Z);
+				}
+				const bool bRim = Y == -HalfWidth || Y == HalfWidth || Z == 8;
+				AddCell(EThorgrimPart::Shield, bRim ? EThorgrimPalette::Brass : EThorgrimPalette::Night, 3, Y, Z);
+			}
+		}
+		AddBox(EThorgrimPart::Shield, EThorgrimPalette::Crimson, FIntVector(4, -1, -5), FIntVector(4, 1, 5));
+		AddBox(EThorgrimPart::Shield, EThorgrimPalette::Crimson, FIntVector(4, -4, 2), FIntVector(4, 4, 4));
+
+		TArray<FThorgrimVoxelCell> Result;
+		Cells.GenerateValueArray(Result);
+		Result.Sort([](const FThorgrimVoxelCell& A, const FThorgrimVoxelCell& B)
+		{
+			if (A.Part != B.Part) return A.Part < B.Part;
+			if (A.Palette != B.Palette) return A.Palette < B.Palette;
+			if (A.Z != B.Z) return A.Z < B.Z;
+			if (A.Y != B.Y) return A.Y < B.Y;
+			return A.X < B.X;
+		});
+		return Result;
+	}
 }
 
 AEmberdeepCharacter::AEmberdeepCharacter()
@@ -297,7 +410,8 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 		}
 	}
 
-	for (const FThorgrimVoxelCell& Voxel : GThorgrimVoxelCells)
+	const TArray<FThorgrimVoxelCell> ThorgrimVoxelCells = BuildThorgrimVoxelCells();
+	for (const FThorgrimVoxelCell& Voxel : ThorgrimVoxelCells)
 	{
 		const int32 ShadeIndex = SelectThorgrimMaterialShade(Voxel);
 		const int32 MeshKey = GetThorgrimMeshKey(Voxel.Part, Voxel.Palette, ShadeIndex);
@@ -369,7 +483,10 @@ void AEmberdeepCharacter::BeginPlay()
 				Material->SetVectorParameterValue(
 					TEXT("Color"),
 					BaseColor);
-				Material->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.12f);
+				// A small presentation lift keeps the miniature readable between torch
+				// pools without making the armour self-lit.
+				Material->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.52f);
+				PaletteMesh->SetMaterial(0, Material);
 				++ThorgrimMaterialCount;
 				ThorgrimMaterials.Add(Material);
 				ThorgrimMaterialBaseColors.Add(BaseColor);

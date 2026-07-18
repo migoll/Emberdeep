@@ -41,5 +41,11 @@ private:
 	TObjectPtr<UTexture2D> ConnectedCombatHud;
 
 	UPROPERTY()
+	TObjectPtr<UTexture2D> PartyRowFrame;
+
+	UPROPERTY()
+	TObjectPtr<UTexture2D> MinimapFrame;
+
+	UPROPERTY()
 	TObjectPtr<UTexture2D> FighterAbilityAtlas;
 };
