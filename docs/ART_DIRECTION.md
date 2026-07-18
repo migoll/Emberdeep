@@ -21,6 +21,7 @@ Grid-authentic voxel dark fantasy with pixel-art presentation, built in Unreal E
 ## Forms and materials
 
 - Every visible solid is authored on the same 4 cm base lattice. Character, equipment, prop, ground, and architecture cells are the same physical size.
+- Adjacent solid cells meet face-to-face. Do not introduce decorative air gaps between every cell; at gameplay scale those gaps become a shimmering subpixel pattern.
 - Build broad planes and larger masses by repeating base cells. A visually larger block may occupy 2x2x2 cells, but it is never one stretched cube.
 - Runtime batching or source-data compression may combine cells internally only when the rendered result is indistinguishable from individual fixed-size cells.
 - Rigid voxel clusters may move and rotate during animation. Individual cells never shear or receive non-uniform scale.

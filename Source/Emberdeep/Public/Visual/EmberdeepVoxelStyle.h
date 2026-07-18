@@ -5,7 +5,9 @@
 namespace EmberdeepVoxelStyle
 {
 	inline constexpr float UnitCm = 4.0f;
-	inline constexpr float RenderFill = 0.94f;
+	// Solid cells meet face-to-face. Subpixel gaps shimmer at the gameplay
+	// camera distance even with FXAA; palette shades provide the grid read.
+	inline constexpr float RenderFill = 1.0f;
 	inline constexpr int32 ShadeCount = 3;
 
 	inline FVector CellCenter(int32 X, int32 Y, int32 Z)

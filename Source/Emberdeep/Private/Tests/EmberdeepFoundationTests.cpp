@@ -65,6 +65,10 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 {
+	TestEqual(
+		TEXT("Solid voxels must meet face-to-face so subpixel gaps cannot shimmer"),
+		EmberdeepVoxelStyle::RenderFill,
+		1.0f);
 	TestNotNull(TEXT("The project game mode must exist"), AEmberdeepGameMode::StaticClass());
 	TestNotNull(TEXT("Replicated encounter game state must exist"), AEmberdeepGameState::StaticClass());
 	TestNotNull(TEXT("The project character must exist"), AEmberdeepCharacter::StaticClass());
