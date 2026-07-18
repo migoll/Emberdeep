@@ -16,6 +16,7 @@ class EMBERDEEP_API AEmberdeepCharacter : public ACharacter
 
 public:
 	AEmberdeepCharacter();
+	virtual void Tick(float DeltaSeconds) override;
 	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
 	void AddGold(int32 Amount);
@@ -39,6 +40,7 @@ protected:
 private:
 	void MoveForward(float Value);
 	void MoveRight(float Value);
+	void UpdateMouseAim();
 	void BasicAttack();
 	void HeavyAttack();
 	void Dodge();

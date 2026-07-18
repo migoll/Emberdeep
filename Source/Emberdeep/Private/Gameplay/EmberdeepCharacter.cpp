@@ -17,7 +17,7 @@
 
 AEmberdeepCharacter::AEmberdeepCharacter()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 	bReplicates = true;
 	SetReplicateMovement(true);
 
@@ -25,7 +25,9 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 	GetCharacterMovement()->MaxWalkSpeed = 500.0f;
 	GetCharacterMovement()->BrakingDecelerationWalking = 2200.0f;
 	GetCharacterMovement()->GroundFriction = 9.0f;
-	GetCharacterMovement()->bOrientRotationToMovement = true;
+	// Movement and aim are intentionally independent. WASD controls velocity;
+	// the mouse controls the character's full 360-degree facing direction.
+	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 900.0f, 0.0f);
 	bUseControllerRotationYaw = false;
 
@@ -84,6 +86,16 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 	HealthComponent->SetMaxHealth(190.0f);
 }
 
+void AEmberdeepCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (IsLocallyControlled() && !IsDead())
+	{
+		UpdateMouseAim();
+	}
+}
+
 void AEmberdeepCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -138,6 +150,36 @@ void AEmberdeepCharacter::MoveRight(float Value)
 		FVector ScreenRight = IsometricCamera->GetRightVector();
 		ScreenRight.Z = 0.0f;
 		AddMovementInput(ScreenRight.GetSafeNormal(), Value);
+	}
+}
+
+void AEmberdeepCharacter::UpdateMouseAim()
+{
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController)
+	{
+		return;
+	}
+
+	FVector MouseWorldOrigin;
+	FVector MouseWorldDirection;
+	if (!PlayerController->DeprojectMousePositionToWorld(MouseWorldOrigin, MouseWorldDirection))
+	{
+		return;
+	}
+
+	// Intersect the mouse ray with a horizontal plane through the character.
+	// This continues to work when the cursor is beyond the visible floor mesh.
+	const FPlane AimPlane(GetActorLocation(), FVector::UpVector);
+	const FVector AimPoint = FMath::LinePlaneIntersection(
+		MouseWorldOrigin,
+		MouseWorldOrigin + MouseWorldDirection * 100000.0f,
+		AimPlane);
+	FVector AimDirection = AimPoint - GetActorLocation();
+	AimDirection.Z = 0.0f;
+	if (!AimDirection.IsNearlyZero())
+	{
+		SetActorRotation(AimDirection.Rotation());
 	}
 }
 
