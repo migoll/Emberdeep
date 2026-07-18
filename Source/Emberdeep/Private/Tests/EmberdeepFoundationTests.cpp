@@ -1,6 +1,9 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "Components/BoxComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Environment/EmberdeepCampEnvironment.h"
 #include "Misc/AutomationTest.h"
 #include "Gameplay/EmberdeepCharacter.h"
 #include "Gameplay/EmberdeepEnemy.h"
@@ -21,6 +24,7 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 	TestNotNull(TEXT("The skeleton enemy must exist"), AEmberdeepEnemy::StaticClass());
 	TestNotNull(TEXT("The gold pickup must exist"), AEmberdeepGoldPickup::StaticClass());
 	TestNotNull(TEXT("The combat HUD must exist"), AEmberdeepHUD::StaticClass());
+	TestNotNull(TEXT("The Broken Caravan Camp environment must exist"), AEmberdeepCampEnvironment::StaticClass());
 	TestNotNull(
 		TEXT("Attacks must enter through a server RPC"),
 		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("ServerPerformAttack")));
@@ -47,6 +51,42 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 		ThorgrimInstanceCount += PaletteMesh->GetInstanceCount();
 	}
 	TestTrue(TEXT("Thorgrim must retain the agreed voxel density"), ThorgrimInstanceCount >= 200);
+
+	const AEmberdeepCampEnvironment* CampDefault =
+		AEmberdeepCampEnvironment::StaticClass()->GetDefaultObject<AEmberdeepCampEnvironment>();
+	TestEqual(TEXT("The camp must batch its restricted palette"), CampDefault->GetPaletteMeshCount(), 13);
+	TestTrue(TEXT("The camp must retain its environment dressing"), CampDefault->GetVoxelInstanceCount() >= 1200);
+	TestEqual(
+		TEXT("The camp must provide floor, perimeter, and prop collision proxies"),
+		CampDefault->GetCollisionProxyCount(),
+		10);
+
+	TArray<UPointLightComponent*> CampLights;
+	CampDefault->GetComponents<UPointLightComponent>(CampLights);
+	TestEqual(TEXT("The camp must retain its fire and three lantern light pools"), CampLights.Num(), 4);
+
+	TArray<UInstancedStaticMeshComponent*> CampPaletteMeshes;
+	CampDefault->GetComponents<UInstancedStaticMeshComponent>(CampPaletteMeshes);
+	for (const UInstancedStaticMeshComponent* PaletteMesh : CampPaletteMeshes)
+	{
+		TestTrue(
+			TEXT("Decorative camp voxels must not create per-instance collision"),
+			PaletteMesh->GetCollisionEnabled() == ECollisionEnabled::NoCollision);
+	}
+
+	TArray<UBoxComponent*> CampCollisionProxies;
+	CampDefault->GetComponents<UBoxComponent>(CampCollisionProxies);
+	for (const UBoxComponent* CollisionProxy : CampCollisionProxies)
+	{
+		TestEqual(
+			TEXT("Camp collision proxies must provide physics collision"),
+			CollisionProxy->GetCollisionEnabled(),
+			ECollisionEnabled::QueryAndPhysics);
+		TestEqual(
+			TEXT("Camp collision proxies must block pawns"),
+			CollisionProxy->GetCollisionResponseToChannel(ECC_Pawn),
+			ECR_Block);
+	}
 	return true;
 }
 

@@ -1,33 +1,23 @@
 #include "Gameplay/EmberdeepGameMode.h"
 
 #include "Components/DirectionalLightComponent.h"
-#include "Components/BoxComponent.h"
 #include "Components/PointLightComponent.h"
-#include "Components/StaticMeshComponent.h"
 #include "Emberdeep.h"
 #include "Engine/DirectionalLight.h"
 #include "Engine/PointLight.h"
 #include "Engine/PostProcessVolume.h"
-#include "Engine/StaticMeshActor.h"
+#include "Environment/EmberdeepCampEnvironment.h"
 #include "Gameplay/EmberdeepCharacter.h"
 #include "Gameplay/EmberdeepEnemy.h"
 #include "Gameplay/EmberdeepPlayerController.h"
 #include "GameFramework/PlayerState.h"
-#include "Materials/MaterialInstanceDynamic.h"
 #include "UI/EmberdeepHUD.h"
-#include "UObject/ConstructorHelpers.h"
 
 AEmberdeepGameMode::AEmberdeepGameMode()
 {
 	DefaultPawnClass = AEmberdeepCharacter::StaticClass();
 	PlayerControllerClass = AEmberdeepPlayerController::StaticClass();
 	HUDClass = AEmberdeepHUD::StaticClass();
-
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeAsset(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	CubeMesh = CubeAsset.Object;
-
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> MaterialAsset(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
-	BlockMaterial = MaterialAsset.Object;
 }
 
 void AEmberdeepGameMode::StartPlay()
@@ -36,7 +26,7 @@ void AEmberdeepGameMode::StartPlay()
 
 	if (HasAuthority())
 	{
-		SpawnBlockoutArena();
+		SpawnCampEnvironment();
 		SpawnCombatEncounter();
 	}
 }
@@ -64,15 +54,15 @@ void AEmberdeepGameMode::RestartPlayer(AController* NewPlayer)
 		return;
 	}
 
-	// Stable party slots prevent freshly connected players from spawning inside
-	// each other while the blockout map still has only one engine PlayerStart.
+	// Stable party slots place freshly connected players together on the camp's
+	// open southern approach without stacking them on its single PlayerStart.
 	static const FVector PartySpawnLocations[] =
 	{
-		FVector(-180.0f, -120.0f, 75.0f),
-		FVector(180.0f, -120.0f, 75.0f),
-		FVector(-180.0f, 120.0f, 75.0f),
-		FVector(180.0f, 120.0f, 75.0f),
-		FVector(0.0f, 0.0f, 75.0f)
+		FVector(-150.0f, -470.0f, 85.0f),
+		FVector(150.0f, -470.0f, 85.0f),
+		FVector(-150.0f, -350.0f, 85.0f),
+		FVector(150.0f, -350.0f, 85.0f),
+		FVector(0.0f, -410.0f, 85.0f)
 	};
 	const int32 PlayerId = NewPlayer->PlayerState ? NewPlayer->PlayerState->GetPlayerId() : 0;
 	const int32 SpawnIndex = FMath::Abs(PlayerId) % UE_ARRAY_COUNT(PartySpawnLocations);
@@ -87,10 +77,12 @@ void AEmberdeepGameMode::RestartPlayer(AController* NewPlayer)
 void AEmberdeepGameMode::SpawnCombatEncounter()
 {
 	RemainingEnemies = 0;
+	// The Phase 0A enemies steer directly toward players, so start them in the
+	// camp's open southern lanes rather than behind blocking work props.
 	const TArray<FVector> EnemyLocations = {
-		FVector(-620.0f, -360.0f, 110.0f),
-		FVector(640.0f, 330.0f, 110.0f),
-		FVector(0.0f, 500.0f, 110.0f)};
+		FVector(-450.0f, -525.0f, 110.0f),
+		FVector(450.0f, -525.0f, 110.0f),
+		FVector(400.0f, -175.0f, 110.0f)};
 
 	FActorSpawnParameters SpawnParameters;
 	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
@@ -120,41 +112,15 @@ void AEmberdeepGameMode::NotifyEnemyDefeated()
 	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_ENCOUNTER EnemyDefeated Remaining=%d"), RemainingEnemies);
 }
 
-void AEmberdeepGameMode::SpawnBlockoutArena()
+void AEmberdeepGameMode::SpawnCampEnvironment()
 {
-	const FLinearColor FloorColor(0.16f, 0.13f, 0.10f);
-	const FLinearColor WallColor(0.22f, 0.235f, 0.26f);
-	const FLinearColor PillarColor(0.30f, 0.24f, 0.16f);
-
-	SpawnBlock(
-		FVector(0.0f, 0.0f, -105.0f),
-		FVector(60.0f, 60.0f, 0.25f),
-		FLinearColor(0.025f, 0.03f, 0.04f),
+	FActorSpawnParameters CampSpawnParameters;
+	CampSpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	CampEnvironment = GetWorld()->SpawnActor<AEmberdeepCampEnvironment>(
+		AEmberdeepCampEnvironment::StaticClass(),
+		FVector::ZeroVector,
 		FRotator::ZeroRotator,
-		false);
-	SpawnBlock(FVector(0.0f, 0.0f, -35.0f), FVector(18.0f, 14.0f, 0.6f), FloorColor);
-
-	// Low curbs share the floor's exact outer dimensions. Tall replacement walls
-	// can later sit on these footprints without changing gameplay collision.
-	// The engine cube is 100 units wide, so this floor's half-extents are
-	// 900 x 700. Each curb ends exactly on that outer edge.
-	SpawnBlock(FVector(0.0f, 680.0f, 32.5f), FVector(18.0f, 0.40f, 0.75f), WallColor);
-	SpawnBlock(FVector(0.0f, -680.0f, 32.5f), FVector(18.0f, 0.40f, 0.75f), WallColor);
-	SpawnBlock(FVector(880.0f, 0.0f, 32.5f), FVector(0.40f, 13.2f, 0.75f), WallColor);
-	SpawnBlock(FVector(-880.0f, 0.0f, 32.5f), FVector(0.40f, 13.2f, 0.75f), WallColor);
-
-	// Gameplay boundaries do not depend on the current wall art or imported camp kit.
-	SpawnBoundary(FVector(0.0f, 680.0f, 95.0f), FVector(900.0f, 20.0f, 140.0f));
-	SpawnBoundary(FVector(0.0f, -680.0f, 95.0f), FVector(900.0f, 20.0f, 140.0f));
-	SpawnBoundary(FVector(880.0f, 0.0f, 95.0f), FVector(20.0f, 660.0f, 140.0f));
-	SpawnBoundary(FVector(-880.0f, 0.0f, 95.0f), FVector(20.0f, 660.0f, 140.0f));
-
-	for (const FVector PillarLocation : {
-		FVector(-867.5f, -667.5f, 120.0f), FVector(-867.5f, 667.5f, 120.0f),
-		FVector(867.5f, -667.5f, 120.0f), FVector(867.5f, 667.5f, 120.0f)})
-	{
-		SpawnBlock(PillarLocation, FVector(0.65f, 0.65f, 2.5f), PillarColor);
-	}
+		CampSpawnParameters);
 
 	APostProcessVolume* ExposureVolume = GetWorld()->SpawnActor<APostProcessVolume>();
 	if (ExposureVolume)
@@ -182,7 +148,7 @@ void AEmberdeepGameMode::SpawnBlockoutArena()
 	if (AmbientFill)
 	{
 		AmbientFill->SetMobility(EComponentMobility::Movable);
-		AmbientFill->GetLightComponent()->SetIntensity(50000.0f);
+		AmbientFill->GetLightComponent()->SetIntensity(18000.0f);
 		AmbientFill->GetLightComponent()->SetLightColor(FLinearColor(0.38f, 0.46f, 0.62f));
 		if (UPointLightComponent* FillComponent = Cast<UPointLightComponent>(AmbientFill->GetLightComponent()))
 		{
@@ -191,81 +157,10 @@ void AEmberdeepGameMode::SpawnBlockoutArena()
 		}
 	}
 
-	for (const FVector TorchLocation : {
-		FVector(-700.0f, -500.0f, 210.0f), FVector(-700.0f, 500.0f, 210.0f),
-		FVector(700.0f, -500.0f, 210.0f), FVector(700.0f, 500.0f, 210.0f)})
-	{
-		APointLight* Torch = GetWorld()->SpawnActor<APointLight>(TorchLocation, FRotator::ZeroRotator);
-		if (Torch)
-		{
-			Torch->SetMobility(EComponentMobility::Movable);
-			Torch->GetLightComponent()->SetIntensity(24000.0f);
-			Torch->GetLightComponent()->SetLightColor(FLinearColor(1.0f, 0.22f, 0.035f));
-			if (UPointLightComponent* PointLightComponent = Cast<UPointLightComponent>(Torch->GetLightComponent()))
-			{
-				PointLightComponent->SetAttenuationRadius(1100.0f);
-			}
-		}
-	}
-
-	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_FOUNDATION ArenaGenerated"));
-}
-
-void AEmberdeepGameMode::SpawnBoundary(const FVector& Location, const FVector& Extent)
-{
-	// A bare AActor has no root during SpawnActor, so its spawn transform cannot
-	// be applied to the component that we create afterward. Build the root first,
-	// register it, then explicitly place the finished boundary actor.
-	AActor* BoundaryActor = GetWorld()->SpawnActor<AActor>(FVector::ZeroVector, FRotator::ZeroRotator);
-	if (!BoundaryActor)
-	{
-		return;
-	}
-
-	UBoxComponent* Boundary = NewObject<UBoxComponent>(BoundaryActor, TEXT("ArenaBoundary"));
-	BoundaryActor->SetRootComponent(Boundary);
-	Boundary->SetBoxExtent(Extent);
-	Boundary->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-	Boundary->SetCollisionObjectType(ECC_WorldStatic);
-	Boundary->SetCollisionResponseToAllChannels(ECR_Block);
-	Boundary->SetHiddenInGame(true);
-	Boundary->RegisterComponent();
-	BoundaryActor->SetActorLocation(Location, false, nullptr, ETeleportType::TeleportPhysics);
-}
-
-void AEmberdeepGameMode::SpawnBlock(
-	const FVector& Location,
-	const FVector& Scale,
-	const FLinearColor& Color,
-	const FRotator& Rotation,
-	bool bEnableCollision)
-{
-	if (!CubeMesh)
-	{
-		return;
-	}
-
-	AStaticMeshActor* Block = GetWorld()->SpawnActor<AStaticMeshActor>(Location, Rotation);
-	if (!Block)
-	{
-		return;
-	}
-
-	UStaticMeshComponent* MeshComponent = Block->GetStaticMeshComponent();
-	// Runtime-generated actors start with Static mobility. Unreal rejects mesh
-	// assignment on a registered Static component, so make it movable first.
-	MeshComponent->SetMobility(EComponentMobility::Movable);
-	MeshComponent->SetStaticMesh(CubeMesh);
-	MeshComponent->SetWorldScale3D(Scale);
-	MeshComponent->SetCollisionEnabled(bEnableCollision ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
-	if (bEnableCollision)
-	{
-		MeshComponent->SetCollisionProfileName(TEXT("BlockAll"));
-	}
-	if (BlockMaterial)
-	{
-		UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(BlockMaterial, Block);
-		Material->SetVectorParameterValue(TEXT("Color"), Color);
-		MeshComponent->SetMaterial(0, Material);
-	}
+	UE_LOG(
+		LogEmberdeep,
+		Display,
+		TEXT("EMBERDEEP_FOUNDATION CampGenerated Instances=%d CollisionProxies=%d"),
+		CampEnvironment ? CampEnvironment->GetVoxelInstanceCount() : 0,
+		CampEnvironment ? CampEnvironment->GetCollisionProxyCount() : 0);
 }

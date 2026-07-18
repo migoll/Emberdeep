@@ -7,6 +7,7 @@ Chunky low-poly dark fantasy with voxel-inspired geometry and pixel-art presenta
 ## Primary reference
 
 - Overall visual moodboard: `SourceAssets/References/moodboard_visual_direction.png`.
+- Broken Caravan Camp environment: `SourceAssets/Environment/Campground/broken_caravan_camp_concept.png`.
 - Use the moodboard for palette, lighting, atmosphere, silhouettes, UI tone, and gameplay-scale readability. More specific written decisions in this document take priority where a generated reference is inconsistent.
 
 ## Camera and presentation
@@ -31,6 +32,13 @@ Chunky low-poly dark fantasy with voxel-inspired geometry and pixel-art presenta
 - Preserve enough layered detail for helmets, shoulders, chest pieces, weapons, shields, cloaks, and upgraded gear to change the character visibly.
 - Judge detail from the normal gameplay camera. Close-up presentation may be denser, but tiny details that disappear during play should not drive the model.
 - Thorgrim is the current density benchmark: `SourceAssets/Characters/thorgrim/thorgrim_concept_primary.png`.
+
+## Environment voxel density
+
+- Build ordinary scenery from reusable modular voxel pieces instead of unique fused meshes.
+- Keep ground, walls, and distant dressing coarser than characters. Spend smaller voxels on focal props such as the wagon, fire, shelter, and workstation.
+- Preserve broad movement lanes and clear character silhouettes; environmental micro-detail that disappears at gameplay scale is not a production target.
+- The first playable benchmark is the generated Broken Caravan Camp under `SourceAssets/Environment/Campground`.
 
 ## Lighting and effects
 

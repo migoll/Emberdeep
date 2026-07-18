@@ -15,10 +15,16 @@
 - Use stable skeleton and bone names after animation production begins.
 - Export runtime meshes as FBX unless a later test establishes a better project standard.
 
+## Generated voxel environments
+
+- Keep licensed source packs, provenance, and generator instructions together under the relevant `SourceAssets/Environment` folder.
+- Prefer deterministic generators and palette-batched instanced geometry for repeated voxel pieces.
+- Keep decorative geometry non-colliding. Author a small number of simple gameplay collision proxies separately.
+- Commit generated previews and runtime data so teammates do not need the original DCC tool to build or review the project.
+
 ## Version control
 
 - Commit `.blend` source and exported runtime assets through Git LFS.
 - Keep file names lowercase with underscores.
 - Do not overwrite another contributor's asset silently.
 - Every contributed asset needs a short README entry describing author, source file, export settings, and license.
-

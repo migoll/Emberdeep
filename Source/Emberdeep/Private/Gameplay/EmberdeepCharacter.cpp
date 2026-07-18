@@ -219,7 +219,7 @@ void AEmberdeepCharacter::BeginPlay()
 
 	if (HasAuthority() && GetActorLocation().Z < 50.0f)
 	{
-		SetActorLocation(FVector(0.0f, 0.0f, 75.0f));
+		SetActorLocation(FVector(0.0f, -430.0f, 85.0f));
 	}
 }
 

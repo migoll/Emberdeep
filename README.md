@@ -8,11 +8,11 @@ The core loop is:
 
 ## Current phase
 
-Phase 0A proves one Fighter, currently represented by Thorgrim the Beast-Slayer, one small dungeon arena, responsive combat, one skeleton foundation, and the intended visual treatment. Multiplayer begins only in Phase 0B, immediately after the combat proof succeeds.
+Phase 0A proves one Fighter, currently represented by Thorgrim the Beast-Slayer, one small camp-flavoured combat arena, responsive combat, one skeleton foundation, and the intended visual treatment. Multiplayer begins only in Phase 0B, immediately after the combat proof succeeds.
 
 The current Phase 0A slice contains:
 
-- a generated blockout dungeon arena;
+- a generated Broken Caravan Camp arena assembled from a reusable voxel kit;
 - fixed orthographic near-isometric camera;
 - playable code-instanced Thorgrim visual with a chunky voxel-built silhouette;
 - screen-relative WASD movement and invulnerable dodge;
@@ -38,6 +38,9 @@ Designer handoff templates live in `SourceAssets/Characters/Fighter` and
 
 Thorgrim's generated source model, portable exports, concept, and production notes
 live in `SourceAssets/Characters/thorgrim`.
+
+The camp concept, CC0 source kit, deterministic generator, preview, and provenance
+live in `SourceAssets/Environment/Campground`.
 
 ## Setup
 

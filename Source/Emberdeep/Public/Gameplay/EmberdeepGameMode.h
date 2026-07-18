@@ -4,8 +4,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "EmberdeepGameMode.generated.h"
 
-class UMaterialInterface;
-class UStaticMesh;
+class AEmberdeepCampEnvironment;
 
 UCLASS()
 class EMBERDEEP_API AEmberdeepGameMode : public AGameModeBase
@@ -27,21 +26,11 @@ public:
 	bool IsEncounterComplete() const { return bEncounterStarted && RemainingEnemies <= 0; }
 
 private:
-	void SpawnBlockoutArena();
+	void SpawnCampEnvironment();
 	void SpawnCombatEncounter();
-	void SpawnBoundary(const FVector& Location, const FVector& Extent);
-	void SpawnBlock(
-		const FVector& Location,
-		const FVector& Scale,
-		const FLinearColor& Color,
-		const FRotator& Rotation = FRotator::ZeroRotator,
-		bool bEnableCollision = true);
 
 	UPROPERTY()
-	TObjectPtr<UStaticMesh> CubeMesh;
-
-	UPROPERTY()
-	TObjectPtr<UMaterialInterface> BlockMaterial;
+	TObjectPtr<AEmberdeepCampEnvironment> CampEnvironment;
 
 	int32 RemainingEnemies = 0;
 	bool bEncounterStarted = false;
