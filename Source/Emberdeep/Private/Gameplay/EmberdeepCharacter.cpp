@@ -12,6 +12,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Gameplay/EmberdeepHealthComponent.h"
+#include "Gameplay/EmberdeepGameMode.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
@@ -562,16 +563,13 @@ bool AEmberdeepCharacter::IsDead() const
 void AEmberdeepCharacter::HandleDeath()
 {
 	GetCharacterMovement()->DisableMovement();
-	DisableInput(Cast<APlayerController>(GetController()));
-	FTimerHandle RestartTimer;
-	GetWorldTimerManager().SetTimer(RestartTimer, this, &AEmberdeepCharacter::RestartEncounter, 2.0f, false);
-}
-
-void AEmberdeepCharacter::RestartEncounter()
-{
-	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	if (HasAuthority())
 	{
-		PlayerController->ConsoleCommand(TEXT("RestartLevel"));
+		if (AEmberdeepGameMode* GameMode = GetWorld()->GetAuthGameMode<AEmberdeepGameMode>())
+		{
+			GameMode->SchedulePlayerRespawn(this);
+		}
 	}
 }
 

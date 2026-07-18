@@ -4,6 +4,8 @@ Each phase answers one question. Later features are not scaffolded early.
 
 ## Phase 0A - Combat and visual proof
 
+Status: complete enough to support the active networking proof.
+
 Question: Is one Fighter immediately enjoyable to control, and can the game convincingly match its chunky pixel-styled 3D target?
 
 Includes one Fighter, one arena, one skeleton system plus elite variant, basic/heavy/dodge actions, health, pickups, victory/death/restart, and combat feedback. Excludes multiplayer and persistence.
@@ -11,6 +13,11 @@ Includes one Fighter, one arena, one skeleton system plus elite variant, basic/h
 Complete when the two-to-five-minute demo is readable, responsive, visually coherent, and free of obvious errors.
 
 ## Phase 0B - Multiplayer proof
+
+Status: active. Host/Join direct IP, authoritative actions, replicated
+encounter state, server enemies/loot, checkpoint respawn, disconnect cleanup,
+and automated two-client smoke testing are implemented. Wider remote repetition
+and latency testing remain before this phase is complete.
 
 Question: Can two to five players complete the same authoritative encounter without desynchronization?
 
@@ -53,4 +60,3 @@ Includes one bounded shared realm/social zone with interest management and insta
 Question: Can validated between-run generation create memorable contracts and consequences without destabilizing the game?
 
 Includes schema-validated generated contracts, dialogue, lore, and deterministic fallbacks. No LLM is called during real-time combat.
-

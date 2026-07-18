@@ -8,9 +8,11 @@
 #include "Gameplay/EmberdeepCharacter.h"
 #include "Gameplay/EmberdeepEnemy.h"
 #include "Gameplay/EmberdeepGameMode.h"
+#include "Gameplay/EmberdeepGameState.h"
 #include "Gameplay/EmberdeepGoldPickup.h"
 #include "Gameplay/EmberdeepHealthComponent.h"
 #include "UI/EmberdeepHUD.h"
+#include "UI/EmberdeepMainMenuWidget.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FEmberdeepFoundationClassesTest,
@@ -20,11 +22,13 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 {
 	TestNotNull(TEXT("The project game mode must exist"), AEmberdeepGameMode::StaticClass());
+	TestNotNull(TEXT("Replicated encounter game state must exist"), AEmberdeepGameState::StaticClass());
 	TestNotNull(TEXT("The project character must exist"), AEmberdeepCharacter::StaticClass());
 	TestNotNull(TEXT("The skeleton enemy must exist"), AEmberdeepEnemy::StaticClass());
 	TestNotNull(TEXT("The gold pickup must exist"), AEmberdeepGoldPickup::StaticClass());
 	TestNotNull(TEXT("The combat HUD must exist"), AEmberdeepHUD::StaticClass());
 	TestNotNull(TEXT("The Broken Caravan Camp environment must exist"), AEmberdeepCampEnvironment::StaticClass());
+	TestNotNull(TEXT("The Host/Join menu must exist"), UEmberdeepMainMenuWidget::StaticClass());
 	TestNotNull(
 		TEXT("Attacks must enter through a server RPC"),
 		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("ServerPerformAttack")));

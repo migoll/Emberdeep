@@ -8,9 +8,11 @@ The core loop is:
 
 ## Current phase
 
-Phase 0A proves one Fighter, currently represented by Thorgrim the Beast-Slayer, one small camp-flavoured combat arena, responsive combat, one skeleton foundation, and the intended visual treatment. Multiplayer begins only in Phase 0B, immediately after the combat proof succeeds.
+Phase 0B is active. The current build proves authoritative direct-IP co-op for
+two to five players in the Broken Caravan Camp encounter. It does not include
+accounts, matchmaking, relay hosting, persistence, or public servers.
 
-The current Phase 0A slice contains:
+The current slice contains:
 
 - a generated Broken Caravan Camp arena assembled from a reusable voxel kit;
 - fixed orthographic near-isometric camera;
@@ -20,9 +22,14 @@ The current Phase 0A slice contains:
 - two skeletons and an elite Bone Warden with proximity aggro and a telegraphed slam;
 - health, death, automatic encounter restart, enemy hit flashes, and defeat feedback;
 - dropped gold pickups and victory tracking;
+- replicated level and experience rewards;
 - a dark-fantasy HUD with dynamic party roster, minimap/objective panel, enemy health,
-  health/dodge orbs, action bar, cooldown state, and gold;
-- replicated-ready C++ health and gameplay foundations.
+  health/dodge orbs, action bar, cooldown state, experience, and gold;
+- Host/Join menu with a direct `IP[:port]` field and a five-player cap;
+- server-authoritative attacks, dodge, health, enemies, loot, encounter state,
+  checkpoint respawn, and disconnect cleanup;
+- verified two-client joins, replicated encounter state, repeated independent
+  respawns, and party cleanup after disconnect.
 
 ## Controls
 
@@ -30,7 +37,26 @@ The current Phase 0A slice contains:
 - Left mouse or `Space`: basic attack hook
 - Right mouse or `E`: heavy attack hook
 - Left Shift: dodge hook
+- Mouse wheel: smooth camera zoom
 - `Escape`: quit standalone test
+
+## Multiplayer test
+
+1. Launch the game and choose **Host Game**.
+2. Launch a second session, keep `127.0.0.1:7777` for the same PC, and choose
+   **Join Game**.
+3. For LAN, enter the host computer's local IPv4 address.
+4. For direct internet IP, the host must forward UDP port `7777` and allow the
+   game through Windows Firewall.
+
+The listen server supports at most five connected players. There is no
+matchmaking or relay fallback in Phase 0B.
+
+Developers can run the repeatable headless verification with:
+
+```powershell
+.\Tools\Test-Multiplayer.ps1
+```
 
 Designer handoff templates live in `SourceAssets/Characters/Fighter` and
 `SourceAssets/Environment/Campground`. Runtime imports belong under the matching

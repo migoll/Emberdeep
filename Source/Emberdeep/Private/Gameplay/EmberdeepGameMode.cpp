@@ -9,15 +9,18 @@
 #include "Environment/EmberdeepCampEnvironment.h"
 #include "Gameplay/EmberdeepCharacter.h"
 #include "Gameplay/EmberdeepEnemy.h"
+#include "Gameplay/EmberdeepGameState.h"
 #include "Gameplay/EmberdeepPlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "UI/EmberdeepHUD.h"
+#include "TimerManager.h"
 
 AEmberdeepGameMode::AEmberdeepGameMode()
 {
 	DefaultPawnClass = AEmberdeepCharacter::StaticClass();
 	PlayerControllerClass = AEmberdeepPlayerController::StaticClass();
 	HUDClass = AEmberdeepHUD::StaticClass();
+	GameStateClass = AEmberdeepGameState::StaticClass();
 }
 
 void AEmberdeepGameMode::StartPlay()
@@ -39,11 +42,25 @@ void AEmberdeepGameMode::PostLogin(APlayerController* NewPlayer)
 		GetNumPlayers());
 }
 
+void AEmberdeepGameMode::PreLogin(
+	const FString& Options,
+	const FString& Address,
+	const FUniqueNetIdRepl& UniqueId,
+	FString& ErrorMessage)
+{
+	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
+	if (ErrorMessage.IsEmpty() && GetNumPlayers() >= 5)
+	{
+		ErrorMessage = TEXT("Emberdeep party is full (maximum five players).");
+	}
+}
+
 void AEmberdeepGameMode::Logout(AController* Exiting)
 {
 	const int32 PlayerId = Exiting && Exiting->PlayerState ? Exiting->PlayerState->GetPlayerId() : INDEX_NONE;
+	const int32 RemainingPlayers = FMath::Max(0, GetNumPlayers() - 1);
 	Super::Logout(Exiting);
-	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_NETWORK PlayerLeft Id=%d Players=%d"), PlayerId, GetNumPlayers());
+	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_NETWORK PlayerLeft Id=%d Players=%d"), PlayerId, RemainingPlayers);
 }
 
 void AEmberdeepGameMode::RestartPlayer(AController* NewPlayer)
@@ -74,11 +91,40 @@ void AEmberdeepGameMode::RestartPlayer(AController* NewPlayer)
 	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_NETWORK PlayerSpawned Id=%d Slot=%d"), PlayerId, SpawnIndex);
 }
 
+void AEmberdeepGameMode::SchedulePlayerRespawn(AEmberdeepCharacter* DefeatedCharacter)
+{
+	if (!HasAuthority() || !DefeatedCharacter)
+	{
+		return;
+	}
+
+	TWeakObjectPtr<AController> Controller = DefeatedCharacter->GetController();
+	TWeakObjectPtr<AEmberdeepCharacter> Character = DefeatedCharacter;
+	FTimerDelegate RespawnDelegate = FTimerDelegate::CreateWeakLambda(this, [this, Controller, Character]()
+	{
+		if (!Controller.IsValid())
+		{
+			return;
+		}
+
+		if (Character.IsValid())
+		{
+			Character->Destroy();
+		}
+		RestartPlayer(Controller.Get());
+		UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_NETWORK PlayerRespawned Id=%d"),
+			Controller->PlayerState ? Controller->PlayerState->GetPlayerId() : INDEX_NONE);
+	});
+
+	FTimerHandle RespawnTimer;
+	GetWorldTimerManager().SetTimer(RespawnTimer, RespawnDelegate, 2.0f, false);
+}
+
 void AEmberdeepGameMode::SpawnCombatEncounter()
 {
-	RemainingEnemies = 0;
 	// The Phase 0A enemies steer directly toward players, so start them in the
 	// camp's open southern lanes rather than behind blocking work props.
+	int32 SpawnedEnemyCount = 0;
 	const TArray<FVector> EnemyLocations = {
 		FVector(-450.0f, -525.0f, 110.0f),
 		FVector(450.0f, -525.0f, 110.0f),
@@ -98,18 +144,36 @@ void AEmberdeepGameMode::SpawnCombatEncounter()
 			{
 				Enemy->ConfigureAsElite();
 			}
-			++RemainingEnemies;
+			++SpawnedEnemyCount;
 		}
 	}
 
-	bEncounterStarted = RemainingEnemies > 0;
-	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_ENCOUNTER Started Enemies=%d"), RemainingEnemies);
+	if (AEmberdeepGameState* EmberdeepGameState = GetGameState<AEmberdeepGameState>())
+	{
+		EmberdeepGameState->SetEncounterState(SpawnedEnemyCount, SpawnedEnemyCount > 0);
+	}
+	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_ENCOUNTER Started Enemies=%d"), SpawnedEnemyCount);
 }
 
 void AEmberdeepGameMode::NotifyEnemyDefeated()
 {
-	RemainingEnemies = FMath::Max(0, RemainingEnemies - 1);
-	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_ENCOUNTER EnemyDefeated Remaining=%d"), RemainingEnemies);
+	if (AEmberdeepGameState* EmberdeepGameState = GetGameState<AEmberdeepGameState>())
+	{
+		EmberdeepGameState->SetRemainingEnemies(EmberdeepGameState->GetRemainingEnemies() - 1);
+		UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_ENCOUNTER EnemyDefeated Remaining=%d"), EmberdeepGameState->GetRemainingEnemies());
+	}
+}
+
+int32 AEmberdeepGameMode::GetRemainingEnemies() const
+{
+	const AEmberdeepGameState* EmberdeepGameState = GetGameState<AEmberdeepGameState>();
+	return EmberdeepGameState ? EmberdeepGameState->GetRemainingEnemies() : 0;
+}
+
+bool AEmberdeepGameMode::IsEncounterComplete() const
+{
+	const AEmberdeepGameState* EmberdeepGameState = GetGameState<AEmberdeepGameState>();
+	return EmberdeepGameState && EmberdeepGameState->IsEncounterComplete();
 }
 
 void AEmberdeepGameMode::SpawnCampEnvironment()

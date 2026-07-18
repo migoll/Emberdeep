@@ -1,5 +1,6 @@
 #include "Gameplay/EmberdeepEnemy.h"
 
+#include "AIController.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/DamageEvents.h"
@@ -19,6 +20,8 @@ AEmberdeepEnemy::AEmberdeepEnemy()
 	PrimaryActorTick.bCanEverTick = true;
 	bReplicates = true;
 	SetReplicateMovement(true);
+	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+	AIControllerClass = AAIController::StaticClass();
 
 	GetCapsuleComponent()->InitCapsuleSize(30.0f, 68.0f);
 	GetCharacterMovement()->MaxWalkSpeed = 265.0f;

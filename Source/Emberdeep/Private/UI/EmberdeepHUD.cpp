@@ -8,6 +8,7 @@
 #include "Gameplay/EmberdeepCharacter.h"
 #include "Gameplay/EmberdeepEnemy.h"
 #include "Gameplay/EmberdeepGameMode.h"
+#include "Gameplay/EmberdeepGameState.h"
 #include "Gameplay/EmberdeepHealthComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "UObject/ConstructorHelpers.h"
@@ -166,8 +167,8 @@ void AEmberdeepHUD::DrawMinimapAndObjective()
 	DrawText(TEXT("THE BONE WARDEN"), FLinearColor(0.95f, 0.62f, 0.20f), MapX, MapY + MapHeight + 16.0f, GEngine->GetSmallFont(), 1.0f, false);
 	DrawText(TEXT("Defeat the arena skeletons"), FLinearColor(0.82f, 0.80f, 0.74f), MapX, MapY + MapHeight + 39.0f, GEngine->GetSmallFont(), 0.9f, false);
 
-	const AEmberdeepGameMode* GameMode = GetWorld()->GetAuthGameMode<AEmberdeepGameMode>();
-	const bool bComplete = GameMode && GameMode->IsEncounterComplete();
+	const AEmberdeepGameState* EmberdeepGameState = GetWorld()->GetGameState<AEmberdeepGameState>();
+	const bool bComplete = EmberdeepGameState && EmberdeepGameState->IsEncounterComplete();
 	DrawRect(bComplete ? FLinearColor(0.82f, 0.55f, 0.12f) : FLinearColor(0.14f, 0.13f, 0.12f), MapX, MapY + MapHeight + 65.0f, 12.0f, 12.0f);
 	DrawText(
 		bComplete ? TEXT("Arena cleared") : TEXT("Bone Warden remains"),

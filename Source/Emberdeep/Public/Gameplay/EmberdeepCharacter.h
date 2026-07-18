@@ -60,7 +60,6 @@ private:
 	void ResetAttackVisual();
 	void EndDodge();
 	void HandleDeath();
-	void RestartEncounter();
 
 	UFUNCTION(Server, Unreliable)
 	void ServerSetAimDirection(FVector_NetQuantizeNormal NewAimDirection);
