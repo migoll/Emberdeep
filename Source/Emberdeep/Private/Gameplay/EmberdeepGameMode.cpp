@@ -165,7 +165,10 @@ void AEmberdeepGameMode::SpawnBlockoutArena()
 
 void AEmberdeepGameMode::SpawnBoundary(const FVector& Location, const FVector& Extent)
 {
-	AActor* BoundaryActor = GetWorld()->SpawnActor<AActor>(Location, FRotator::ZeroRotator);
+	// A bare AActor has no root during SpawnActor, so its spawn transform cannot
+	// be applied to the component that we create afterward. Build the root first,
+	// register it, then explicitly place the finished boundary actor.
+	AActor* BoundaryActor = GetWorld()->SpawnActor<AActor>(FVector::ZeroVector, FRotator::ZeroRotator);
 	if (!BoundaryActor)
 	{
 		return;
@@ -179,6 +182,7 @@ void AEmberdeepGameMode::SpawnBoundary(const FVector& Location, const FVector& E
 	Boundary->SetCollisionResponseToAllChannels(ECR_Block);
 	Boundary->SetHiddenInGame(true);
 	Boundary->RegisterComponent();
+	BoundaryActor->SetActorLocation(Location, false, nullptr, ETeleportType::TeleportPhysics);
 }
 
 void AEmberdeepGameMode::SpawnBlock(
