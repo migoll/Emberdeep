@@ -336,7 +336,7 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 	IsometricCamera->PostProcessSettings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
 	IsometricCamera->PostProcessSettings.AutoExposureApplyPhysicalCameraExposure = 0;
 	IsometricCamera->PostProcessSettings.bOverride_AutoExposureBias = true;
-	IsometricCamera->PostProcessSettings.AutoExposureBias = 2.0f;
+	IsometricCamera->PostProcessSettings.AutoExposureBias = 1.60f;
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> ProjectVoxelMaterial(
@@ -485,7 +485,7 @@ void AEmberdeepCharacter::BeginPlay()
 					BaseColor);
 				// A small presentation lift keeps the miniature readable between torch
 				// pools without making the armour self-lit.
-				Material->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.52f);
+				Material->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.08f);
 				PaletteMesh->SetMaterial(0, Material);
 				++ThorgrimMaterialCount;
 				ThorgrimMaterials.Add(Material);

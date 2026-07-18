@@ -40,7 +40,10 @@ AEmberdeepHUD::AEmberdeepHUD()
 	MoonKeyLight->SetupAttachment(PresentationRoot);
 	MoonKeyLight->SetRelativeRotation(FRotator(-52.0f, -38.0f, 0.0f));
 	MoonKeyLight->SetMobility(EComponentMobility::Movable);
-	MoonKeyLight->SetIntensity(3.6f);
+	// Keep only a faint, shadow-casting moon baseline. Local environment lights
+	// must remain the dominant source so torches produce readable pools instead
+	// of the entire room receiving the same flat value.
+	MoonKeyLight->SetIntensity(1.60f);
 	MoonKeyLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(121, 127, 137)));
 	MoonKeyLight->SetCastShadows(true);
 	MoonKeyLight->SetLightSourceAngle(1.5f);
@@ -49,7 +52,7 @@ AEmberdeepHUD::AEmberdeepHUD()
 	AmbientFillLight->SetupAttachment(PresentationRoot);
 	AmbientFillLight->SetRelativeLocation(FVector(0.0f, 0.0f, 900.0f));
 	AmbientFillLight->SetMobility(EComponentMobility::Movable);
-	AmbientFillLight->SetIntensity(26000.0f);
+	AmbientFillLight->SetIntensity(0.0f);
 	AmbientFillLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(135, 123, 110)));
 	AmbientFillLight->SetAttenuationRadius(3600.0f);
 	AmbientFillLight->SetSourceRadius(500.0f);
@@ -65,7 +68,7 @@ AEmberdeepHUD::AEmberdeepHUD()
 	Settings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
 	Settings.AutoExposureApplyPhysicalCameraExposure = 0;
 	Settings.bOverride_AutoExposureBias = true;
-	Settings.AutoExposureBias = 2.0f;
+	Settings.AutoExposureBias = 1.60f;
 	Settings.bOverride_ColorSaturation = true;
 	Settings.ColorSaturation = FVector4(0.93f, 0.91f, 0.87f, 1.0f);
 	Settings.bOverride_ColorContrast = true;

@@ -255,7 +255,7 @@ void AEmberdeepEnemy::BeginPlay()
 		if (UMaterialInstanceDynamic* Material = BoneVoxelMeshes[ShadeIndex]->CreateDynamicMaterialInstance(0))
 		{
 			Material->SetVectorParameterValue(TEXT("Color"), EmberdeepVoxelStyle::ShadeColor(BoneColor, ShadeIndex));
-			Material->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.48f);
+			Material->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.07f);
 			BoneVoxelMeshes[ShadeIndex]->SetMaterial(0, Material);
 			BoneMaterials.Add(Material);
 		}
@@ -265,7 +265,7 @@ void AEmberdeepEnemy::BeginPlay()
 	{
 		WeaponSteelMaterial->SetVectorParameterValue(
 			TEXT("Color"), FLinearColor(0.28f, 0.35f, 0.43f));
-		WeaponSteelMaterial->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.40f);
+		WeaponSteelMaterial->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.05f);
 		WeaponSteelVoxels->SetMaterial(0, WeaponSteelMaterial);
 	}
 	WeaponGripMaterial = WeaponGripVoxels->CreateDynamicMaterialInstance(0);
@@ -273,7 +273,7 @@ void AEmberdeepEnemy::BeginPlay()
 	{
 		WeaponGripMaterial->SetVectorParameterValue(
 			TEXT("Color"), FLinearColor(0.13f, 0.045f, 0.012f));
-		WeaponGripMaterial->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.30f);
+		WeaponGripMaterial->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.03f);
 		WeaponGripVoxels->SetMaterial(0, WeaponGripMaterial);
 	}
 	AccentMaterial = AccentVoxels->CreateDynamicMaterialInstance(0);

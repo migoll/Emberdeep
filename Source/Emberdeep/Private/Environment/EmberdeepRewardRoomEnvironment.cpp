@@ -426,9 +426,9 @@ AEmberdeepRewardRoomEnvironment::AEmberdeepRewardRoomEnvironment()
 		GoldLight->SetupAttachment(RewardRoomRoot);
 		GoldLight->SetRelativeLocation(GoldLightLocations[LightIndex]);
 		GoldLight->SetMobility(EComponentMobility::Movable);
-		GoldLight->SetIntensity(6400.0f);
+		GoldLight->SetIntensity(24000.0f);
 		GoldLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 127, 43)));
-		GoldLight->SetAttenuationRadius(430.0f);
+		GoldLight->SetAttenuationRadius(400.0f);
 		GoldLight->SetSourceRadius(12.0f);
 		GoldLight->SetSoftSourceRadius(4.0f);
 		GoldLight->SetCastShadows(true);
@@ -511,9 +511,9 @@ void AEmberdeepRewardRoomEnvironment::ApplyPaletteMaterials()
 			PaletteIndex == static_cast<int32>(ERewardPalette::Iron) ? 0.18f : 0.06f);
 		Material->SetScalarParameterValue(
 			TEXT("EmissiveStrength"),
-			PaletteIndex == static_cast<int32>(ERewardPalette::RewardGold) ? 0.55f
-			: PaletteIndex == static_cast<int32>(ERewardPalette::Frost) ? 0.14f
-			: 0.10f);
+			PaletteIndex == static_cast<int32>(ERewardPalette::RewardGold) ? 0.35f
+			: PaletteIndex == static_cast<int32>(ERewardPalette::Frost) ? 0.04f
+			: 0.015f);
 		PaletteMeshes[PaletteIndex]->SetMaterial(0, Material);
 	}
 }

@@ -473,9 +473,9 @@ AEmberdeepDungeonEnvironment::AEmberdeepDungeonEnvironment()
 		TorchLight->SetupAttachment(DungeonRoot);
 		TorchLight->SetRelativeLocation(TorchLocations[TorchIndex]);
 		TorchLight->SetMobility(EComponentMobility::Movable);
-		TorchLight->SetIntensity(15400.0f);
+		TorchLight->SetIntensity(65000.0f);
 		TorchLight->SetLightColor(FLinearColor::FromSRGBColor(FColor(255, 105, 35)));
-		TorchLight->SetAttenuationRadius(620.0f);
+		TorchLight->SetAttenuationRadius(720.0f);
 		TorchLight->SetSourceRadius(12.0f);
 		TorchLight->SetSoftSourceRadius(4.0f);
 		TorchLight->SetCastShadows(true);
@@ -552,7 +552,7 @@ void AEmberdeepDungeonEnvironment::ApplyPaletteMaterials()
 		Material->SetVectorParameterValue(TEXT("Color"), GDungeonPaletteDefinitions[PaletteIndex].Color);
 		Material->SetScalarParameterValue(
 			TEXT("EmissiveStrength"),
-			PaletteIndex == static_cast<int32>(EDungeonPalette::Fire) ? 4.5f : 0.14f);
+			PaletteIndex == static_cast<int32>(EDungeonPalette::Fire) ? 4.5f : 0.015f);
 		PaletteMeshes[PaletteIndex]->SetMaterial(0, Material);
 	}
 }
