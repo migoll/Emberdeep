@@ -17,6 +17,7 @@ class EMBERDEEP_API AEmberdeepEnemy : public ACharacter
 public:
 	AEmberdeepEnemy();
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 	void ConfigureAsElite();
 	void ConfigureForRun(int32 Tier, bool bElite);
@@ -35,6 +36,16 @@ private:
 	void HandleDeath();
 	void ResetHitFlash();
 	void ApplyBoneColor(const FLinearColor& Color);
+	void ApplyEnemyStyle();
+
+	UFUNCTION()
+	void OnRep_EnemyStyle();
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayHitFeedback(float Damage, FVector_NetQuantizeNormal HitDirection, bool bFatal);
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastSetAttackTelegraph(bool bVisible, bool bEliteAttack);
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UEmberdeepHealthComponent> HealthComponent;
@@ -62,6 +73,7 @@ private:
 
 	float NextAttackTime = 0.0f;
 	bool bHasAggro = false;
+	UPROPERTY(ReplicatedUsing = OnRep_EnemyStyle)
 	bool bIsElite = false;
 	bool bAttackWindingUp = false;
 	int32 GoldDropValue = 7;

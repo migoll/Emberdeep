@@ -8,6 +8,7 @@
 #include "Environment/EmberdeepRewardRoomEnvironment.h"
 #include "Misc/AutomationTest.h"
 #include "Gameplay/EmberdeepCharacter.h"
+#include "Gameplay/EmberdeepCombatFeedback.h"
 #include "Gameplay/EmberdeepEnemy.h"
 #include "Gameplay/EmberdeepGameMode.h"
 #include "Gameplay/EmberdeepGameState.h"
@@ -82,6 +83,7 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 	TestNotNull(TEXT("Replicated encounter game state must exist"), AEmberdeepGameState::StaticClass());
 	TestNotNull(TEXT("The project character must exist"), AEmberdeepCharacter::StaticClass());
 	TestNotNull(TEXT("The skeleton enemy must exist"), AEmberdeepEnemy::StaticClass());
+	TestNotNull(TEXT("Client-only combat feedback must exist"), AEmberdeepCombatFeedback::StaticClass());
 	TestNotNull(TEXT("The gold pickup must exist"), AEmberdeepGoldPickup::StaticClass());
 	TestNotNull(TEXT("The combat HUD must exist"), AEmberdeepHUD::StaticClass());
 	TestNotNull(TEXT("The Broken Caravan Camp environment must exist"), AEmberdeepCampEnvironment::StaticClass());
@@ -118,6 +120,18 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 	TestNotNull(
 		TEXT("Attack presentation must multicast to the party"),
 		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("MulticastPlayAttackVisual")));
+	TestNotNull(
+		TEXT("Dodge presentation must multicast to the party"),
+		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("MulticastPlayDodgeVisual")));
+	TestNotNull(
+		TEXT("Player damage presentation must multicast to the party"),
+		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("MulticastPlayHurtVisual")));
+	TestNotNull(
+		TEXT("Enemy hit presentation must multicast to the party"),
+		AEmberdeepEnemy::StaticClass()->FindFunctionByName(TEXT("MulticastPlayHitFeedback")));
+	TestNotNull(
+		TEXT("Enemy attack warnings must multicast to the party"),
+		AEmberdeepEnemy::StaticClass()->FindFunctionByName(TEXT("MulticastSetAttackTelegraph")));
 
 	const AEmberdeepCharacter* CharacterDefault = AEmberdeepCharacter::StaticClass()->GetDefaultObject<AEmberdeepCharacter>();
 	TestEqual(TEXT("Characters begin at level one"), CharacterDefault->GetCharacterLevel(), 1);

@@ -114,6 +114,10 @@ bool AEmberdeepLootContainer::TryTakeEntry(AEmberdeepPlayerController* Controlle
 	LootEntries.RemoveAt(EntryIndex);
 	bDepleted = LootEntries.IsEmpty();
 	ApplyVisualState();
+	if (bDepleted && !bChest)
+	{
+		SetLifeSpan(1.25f);
+	}
 	Controller->NotifyInventoryChanged();
 	RefreshViewers();
 	return true;
@@ -159,6 +163,32 @@ void AEmberdeepLootContainer::ApplyVisualState()
 		? FLinearColor(0.025f, 0.025f, 0.025f)
 		: bLegendaryChest ? FLinearColor(0.98f, 0.50f, 0.035f) : FLinearColor(0.25f, 0.12f, 0.55f);
 
+	// Enemy spoils are compact ground markers; caches and end rewards retain a
+	// readable chest silhouette. This prevents several corpse drops from merging
+	// into one large lattice of overlapping placeholder boxes.
+	if (bChest)
+	{
+		ContainerBase->SetRelativeScale3D(FVector(0.62f, 0.82f, 0.35f));
+		ContainerBase->SetRelativeLocation(FVector(0.0f, 0.0f, 30.0f));
+		ContainerLid->SetRelativeScale3D(FVector(0.68f, 0.88f, 0.15f));
+		ContainerLid->SetRelativeLocation(FVector(0.0f, 0.0f, 58.0f));
+		LootGlow->SetRelativeScale3D(FVector(0.10f, 0.48f, 0.055f));
+		LootGlow->SetRelativeLocation(FVector(-58.0f, 0.0f, 48.0f));
+		LootLight->SetRelativeLocation(FVector(0.0f, 0.0f, 75.0f));
+		LootLight->SetIntensity(bLegendaryChest ? 6500.0f : 3800.0f);
+	}
+	else
+	{
+		ContainerBase->SetRelativeScale3D(FVector(0.24f, 0.30f, 0.16f));
+		ContainerBase->SetRelativeLocation(FVector(0.0f, 0.0f, 15.0f));
+		ContainerLid->SetRelativeScale3D(FVector(0.26f, 0.26f, 0.08f));
+		ContainerLid->SetRelativeLocation(FVector(0.0f, 0.0f, 31.0f));
+		LootGlow->SetRelativeScale3D(FVector(0.055f, 0.055f, 0.48f));
+		LootGlow->SetRelativeLocation(FVector(0.0f, 0.0f, 76.0f));
+		LootLight->SetRelativeLocation(FVector(0.0f, 0.0f, 58.0f));
+		LootLight->SetIntensity(2100.0f);
+	}
+
 	if (UMaterialInstanceDynamic* Material = ContainerBase->CreateDynamicMaterialInstance(0))
 	{
 		Material->SetVectorParameterValue(TEXT("Color"), Wood);
@@ -174,7 +204,9 @@ void AEmberdeepLootContainer::ApplyVisualState()
 	LootGlow->SetHiddenInGame(bDepleted);
 	LootLight->SetVisibility(!bDepleted);
 	LootLight->SetLightColor(Glow);
-	ContainerLid->SetRelativeRotation(bDepleted ? FRotator(0.0f, 0.0f, -32.0f) : FRotator::ZeroRotator);
+	ContainerLid->SetRelativeRotation(bDepleted
+		? FRotator(0.0f, 0.0f, -32.0f)
+		: bChest ? FRotator::ZeroRotator : FRotator(0.0f, 18.0f, -8.0f));
 }
 
 void AEmberdeepLootContainer::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

@@ -12,6 +12,8 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Gameplay/EmberdeepHealthComponent.h"
+#include "Gameplay/EmberdeepCombatFeedback.h"
+#include "Gameplay/EmberdeepEnemy.h"
 #include "Gameplay/EmberdeepGameMode.h"
 #include "Gameplay/EmberdeepPlayerState.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -300,14 +302,18 @@ void AEmberdeepCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (IsLocallyControlled() && !IsDead())
+	if (IsLocallyControlled())
 	{
-		UpdateMouseAim();
+		if (!IsDead())
+		{
+			UpdateMouseAim();
+		}
 		IsometricCamera->OrthoWidth = FMath::FInterpTo(
 			IsometricCamera->OrthoWidth,
 			TargetOrthoWidth,
 			DeltaSeconds,
 			ZoomInterpolationSpeed);
+		UpdateLocalCameraShake(DeltaSeconds);
 	}
 }
 
@@ -340,10 +346,13 @@ void AEmberdeepCharacter::BeginPlay()
 				(MeshIndex / EmberdeepVoxelStyle::ShadeCount) % UE_ARRAY_COUNT(GThorgrimPaletteDefinitions);
 			if (UMaterialInstanceDynamic* Material = PaletteMesh->CreateDynamicMaterialInstance(0))
 			{
+				const FLinearColor BaseColor = GThorgrimPaletteDefinitions[PaletteIndex].Shades[ShadeIndex];
 				Material->SetVectorParameterValue(
 					TEXT("Color"),
-					GThorgrimPaletteDefinitions[PaletteIndex].Shades[ShadeIndex]);
+					BaseColor);
 				++ThorgrimMaterialCount;
+				ThorgrimMaterials.Add(Material);
+				ThorgrimMaterialBaseColors.Add(BaseColor);
 			}
 		}
 	}
@@ -503,6 +512,7 @@ void AEmberdeepCharacter::ExecuteDodge(const FVector& DodgeDirection)
 	NextDodgeTime = GetWorld()->GetTimeSeconds() + DodgeCooldown;
 	bInvulnerable = true;
 	LaunchCharacter(SafeDirection * 920.0f, true, false);
+	MulticastPlayDodgeVisual(SafeDirection);
 	FTimerHandle DodgeTimer;
 	GetWorldTimerManager().SetTimer(DodgeTimer, this, &AEmberdeepCharacter::EndDodge, 0.24f, false);
 	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_INPUT Dodge"));
@@ -548,7 +558,7 @@ void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& Attack
 	NextAttackTime = GetWorld()->GetTimeSeconds() + Cooldown;
 	ReplicatedAimDirection = SafeAttackDirection;
 	SetActorRotation(SafeAttackDirection.Rotation());
-	MulticastPlayAttackVisual(bHeavyAttack);
+	LaunchCharacter(SafeAttackDirection * (bHeavyAttack ? 145.0f : 85.0f), false, false);
 
 	const FVector AttackCenter = GetActorLocation() + SafeAttackDirection * Reach;
 	FCollisionObjectQueryParams ObjectQuery;
@@ -567,8 +577,8 @@ void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& Attack
 	TSet<AActor*> DamagedActors;
 	for (const FOverlapResult& Overlap : Overlaps)
 	{
-		AActor* Target = Overlap.GetActor();
-		if (!Target || Target == this || DamagedActors.Contains(Target))
+		AEmberdeepEnemy* Target = Cast<AEmberdeepEnemy>(Overlap.GetActor());
+		if (!Target || DamagedActors.Contains(Target) || Target->GetHealthComponent()->IsDead())
 		{
 			continue;
 		}
@@ -579,16 +589,31 @@ void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& Attack
 		DamageEvent.ShotDirection = SafeAttackDirection * KnockbackStrength;
 		Target->TakeDamage(Damage, DamageEvent, GetController(), this);
 	}
+	MulticastPlayAttackVisual(bHeavyAttack, DamagedActors.Num());
 
 	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_COMBAT FighterAttack Type=%s Damage=%.0f Hits=%d"),
 		bHeavyAttack ? TEXT("Heavy") : TEXT("Basic"), Damage, DamagedActors.Num());
 }
 
-void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack)
+void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack, int32 HitCount)
 {
 	const float SwingDegrees = bHeavyAttack ? 125.0f : 85.0f;
 	const float SwingDuration = bHeavyAttack ? 0.20f : 0.13f;
-	ThorgrimAxeRoot->SetRelativeRotation(ThorgrimAxeRestingRotation + FRotator(0.0f, 0.0f, SwingDegrees));
+	const float SwingDirection = bHeavyAttack || (++AttackVisualSequence % 2 == 0) ? 1.0f : -1.0f;
+	ThorgrimAxeRoot->SetRelativeRotation(
+		ThorgrimAxeRestingRotation + FRotator(0.0f, 0.0f, SwingDegrees * SwingDirection));
+
+	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
+	AEmberdeepCombatFeedback::SpawnSwing(
+		GetWorld(),
+		GetActorLocation() + Forward * (bHeavyAttack ? 145.0f : 110.0f) + FVector(0.0f, 0.0f, 55.0f),
+		Forward,
+		bHeavyAttack,
+		HitCount > 0);
+	if (IsLocallyControlled() && HitCount > 0)
+	{
+		StartLocalCameraShake(bHeavyAttack ? 8.5f : 4.5f, bHeavyAttack ? 0.19f : 0.11f);
+	}
 	FTimerHandle VisualTimer;
 	GetWorldTimerManager().SetTimer(VisualTimer, this, &AEmberdeepCharacter::ResetAttackVisual, SwingDuration, false);
 }
@@ -610,9 +635,14 @@ void AEmberdeepCharacter::ServerPerformAttack_Implementation(
 	ExecuteAttack(bHeavyAttack, FVector(RequestedAimDirection));
 }
 
-void AEmberdeepCharacter::MulticastPlayAttackVisual_Implementation(bool bHeavyAttack)
+void AEmberdeepCharacter::MulticastPlayAttackVisual_Implementation(bool bHeavyAttack, int32 HitCount)
 {
-	PlayAttackVisual(bHeavyAttack);
+	PlayAttackVisual(bHeavyAttack, HitCount);
+}
+
+void AEmberdeepCharacter::MulticastPlayDodgeVisual_Implementation(FVector_NetQuantizeNormal DodgeDirection)
+{
+	AEmberdeepCombatFeedback::SpawnDodge(GetWorld(), GetActorLocation(), FVector(DodgeDirection));
 }
 
 void AEmberdeepCharacter::ServerDodge_Implementation(FVector_NetQuantizeNormal RequestedDodgeDirection)
@@ -650,7 +680,85 @@ float AEmberdeepCharacter::TakeDamage(
 	}
 
 	const float MitigatedDamage = FMath::Max(1.0f, DamageAmount - GetEquipmentArmorBonus());
-	return HealthComponent->ApplyDamage(MitigatedDamage);
+	const float AppliedDamage = HealthComponent->ApplyDamage(MitigatedDamage);
+	if (AppliedDamage > 0.0f)
+	{
+		MulticastPlayHurtVisual(AppliedDamage, IsDead());
+	}
+	return AppliedDamage;
+}
+
+void AEmberdeepCharacter::MulticastPlayHurtVisual_Implementation(float Damage, bool bFatal)
+{
+	PlayHurtVisual(Damage, bFatal);
+}
+
+void AEmberdeepCharacter::PlayHurtVisual(float Damage, bool bFatal)
+{
+	for (UMaterialInstanceDynamic* Material : ThorgrimMaterials)
+	{
+		if (Material)
+		{
+			Material->SetVectorParameterValue(TEXT("Color"), bFatal
+				? FLinearColor(0.18f, 0.005f, 0.002f)
+				: FLinearColor(1.0f, 0.08f, 0.025f));
+		}
+	}
+	AEmberdeepCombatFeedback::SpawnPlayerHurt(GetWorld(), GetActorLocation(), Damage, bFatal);
+	if (IsLocallyControlled())
+	{
+		StartLocalCameraShake(bFatal ? 13.0f : 7.0f, bFatal ? 0.30f : 0.16f);
+	}
+
+	FTimerHandle HitVisualTimer;
+	GetWorldTimerManager().SetTimer(HitVisualTimer, this, &AEmberdeepCharacter::ResetHitVisual, 0.11f, false);
+}
+
+void AEmberdeepCharacter::ResetHitVisual()
+{
+	const int32 MaterialCount = FMath::Min(ThorgrimMaterials.Num(), ThorgrimMaterialBaseColors.Num());
+	for (int32 Index = 0; Index < MaterialCount; ++Index)
+	{
+		if (ThorgrimMaterials[Index])
+		{
+			ThorgrimMaterials[Index]->SetVectorParameterValue(TEXT("Color"), ThorgrimMaterialBaseColors[Index]);
+		}
+	}
+}
+
+void AEmberdeepCharacter::StartLocalCameraShake(float Strength, float Duration)
+{
+	CameraShakeStrength = FMath::Max(CameraShakeStrength, Strength);
+	CameraShakeDuration = FMath::Max(CameraShakeDuration, Duration);
+	CameraShakeRemaining = FMath::Max(CameraShakeRemaining, Duration);
+}
+
+void AEmberdeepCharacter::UpdateLocalCameraShake(float DeltaSeconds)
+{
+	if (!CameraBoom)
+	{
+		return;
+	}
+	if (CameraShakeRemaining <= 0.0f)
+	{
+		CameraBoom->SocketOffset = FMath::VInterpTo(CameraBoom->SocketOffset, FVector::ZeroVector, DeltaSeconds, 24.0f);
+		return;
+	}
+
+	CameraShakeRemaining = FMath::Max(0.0f, CameraShakeRemaining - DeltaSeconds);
+	const float StrengthAlpha = CameraShakeDuration > KINDA_SMALL_NUMBER
+		? CameraShakeRemaining / CameraShakeDuration
+		: 0.0f;
+	const float Time = GetWorld()->GetTimeSeconds();
+	CameraBoom->SocketOffset = FVector(
+		0.0f,
+		FMath::Sin(Time * 91.0f) * CameraShakeStrength * StrengthAlpha,
+		FMath::Cos(Time * 117.0f) * CameraShakeStrength * 0.72f * StrengthAlpha);
+	if (CameraShakeRemaining <= 0.0f)
+	{
+		CameraShakeStrength = 0.0f;
+		CameraShakeDuration = 0.0f;
+	}
 }
 
 void AEmberdeepCharacter::AddGold(int32 Amount)

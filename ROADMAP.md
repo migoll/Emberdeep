@@ -4,7 +4,10 @@ Each phase answers one question. Later features are not scaffolded early.
 
 ## Phase 0A - Combat and visual proof
 
-Status: complete enough to support the active networking proof.
+Status: complete enough to support the active networking proof. A multiplayer-safe
+combat-feel pass now provides attack warnings, hit/death bursts, floating damage,
+directional knockback, dodge trails, and local camera punch without moving damage
+authority into cosmetic code.
 
 Question: Is one Fighter immediately enjoyable to control, and can the game convincingly match its chunky pixel-styled 3D target?
 

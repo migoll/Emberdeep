@@ -8,11 +8,13 @@
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Gameplay/EmberdeepCharacter.h"
+#include "Gameplay/EmberdeepCombatFeedback.h"
 #include "Gameplay/EmberdeepGameMode.h"
 #include "Gameplay/EmberdeepGoldPickup.h"
 #include "Gameplay/EmberdeepHealthComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Visual/EmberdeepVoxelStyle.h"
@@ -138,6 +140,7 @@ void AEmberdeepEnemy::BeginPlay()
 	{
 		TelegraphMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.9f, 0.015f, 0.005f));
 	}
+	ApplyEnemyStyle();
 }
 
 void AEmberdeepEnemy::ConfigureAsElite()
@@ -157,8 +160,7 @@ void AEmberdeepEnemy::ConfigureForRun(int32 Tier, bool bElite)
 	AggroRange = bIsElite ? 680.0f : 520.0f;
 	GoldDropValue = FMath::RoundToInt((bIsElite ? 30.0f : 7.0f) * TierScale);
 	GetCharacterMovement()->MaxWalkSpeed = bIsElite ? 225.0f : 265.0f;
-	SetActorScale3D(bIsElite ? FVector(1.25f) : FVector::OneVector);
-	ApplyBoneColor(bIsElite ? FLinearColor(0.34f, 0.10f, 0.055f) : FLinearColor(0.48f, 0.42f, 0.31f));
+	ApplyEnemyStyle();
 }
 
 void AEmberdeepEnemy::Tick(float DeltaSeconds)
@@ -229,24 +231,23 @@ void AEmberdeepEnemy::AttackTarget(ACharacter* TargetCharacter)
 	}
 
 	NextAttackTime = GetWorld()->GetTimeSeconds() + AttackCooldown;
-	if (bIsElite)
-	{
-		bAttackWindingUp = true;
-		PendingAttackTarget = TargetCharacter;
-		AttackTelegraph->SetHiddenInGame(false);
-		GetCharacterMovement()->StopMovementImmediately();
-		FTimerHandle WindupTimer;
-		GetWorldTimerManager().SetTimer(WindupTimer, this, &AEmberdeepEnemy::ResolveEliteAttack, 0.72f, false);
-		return;
-	}
-
-	UGameplayStatics::ApplyDamage(TargetCharacter, AttackDamage, GetController(), this, UDamageType::StaticClass());
+	bAttackWindingUp = true;
+	PendingAttackTarget = TargetCharacter;
+	MulticastSetAttackTelegraph(true, bIsElite);
+	GetCharacterMovement()->StopMovementImmediately();
+	FTimerHandle WindupTimer;
+	GetWorldTimerManager().SetTimer(
+		WindupTimer,
+		this,
+		&AEmberdeepEnemy::ResolveEliteAttack,
+		bIsElite ? 0.72f : 0.30f,
+		false);
 }
 
 void AEmberdeepEnemy::ResolveEliteAttack()
 {
 	bAttackWindingUp = false;
-	AttackTelegraph->SetHiddenInGame(true);
+	MulticastSetAttackTelegraph(false, bIsElite);
 
 	ACharacter* TargetCharacter = PendingAttackTarget.Get();
 	PendingAttackTarget.Reset();
@@ -275,6 +276,7 @@ float AEmberdeepEnemy::TakeDamage(
 
 	bHasAggro = true;
 	const float AppliedDamage = HealthComponent->ApplyDamage(DamageAmount);
+	const bool bFatal = HealthComponent->IsDead();
 	if (HealthComponent->IsDead())
 	{
 		if (AEmberdeepCharacter* Killer = Cast<AEmberdeepCharacter>(DamageCauser))
@@ -283,16 +285,50 @@ float AEmberdeepEnemy::TakeDamage(
 		}
 	}
 
+	FVector HitDirection = DamageCauser
+		? (GetActorLocation() - DamageCauser->GetActorLocation()).GetSafeNormal2D()
+		: FVector::ForwardVector;
 	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
 	{
 		const FPointDamageEvent* PointDamage = static_cast<const FPointDamageEvent*>(&DamageEvent);
-		LaunchCharacter(PointDamage->ShotDirection, true, false);
+		const FVector RequestedDirection = FVector(PointDamage->ShotDirection).GetSafeNormal2D();
+		if (!RequestedDirection.IsNearlyZero())
+		{
+			HitDirection = RequestedDirection;
+		}
 	}
-
-	ApplyBoneColor(FLinearColor(0.95f, 0.055f, 0.02f));
-	FTimerHandle FlashTimer;
-	GetWorldTimerManager().SetTimer(FlashTimer, this, &AEmberdeepEnemy::ResetHitFlash, 0.10f, false);
+	const float KnockbackStrength = DamageAmount >= 55.0f ? 620.0f : 275.0f;
+	LaunchCharacter(HitDirection * KnockbackStrength + FVector(0.0f, 0.0f, bFatal ? 165.0f : 70.0f), true, false);
+	MulticastPlayHitFeedback(AppliedDamage, HitDirection, bFatal);
 	return AppliedDamage;
+}
+
+void AEmberdeepEnemy::MulticastPlayHitFeedback_Implementation(
+	float Damage,
+	FVector_NetQuantizeNormal HitDirection,
+	bool bFatal)
+{
+	ApplyBoneColor(bFatal ? FLinearColor(1.0f, 0.20f, 0.015f) : FLinearColor(0.95f, 0.055f, 0.02f));
+	AEmberdeepCombatFeedback::SpawnHit(
+		GetWorld(),
+		GetActorLocation() + FVector(0.0f, 0.0f, 35.0f),
+		FVector(HitDirection),
+		Damage,
+		bFatal);
+	if (!bFatal)
+	{
+		FTimerHandle FlashTimer;
+		GetWorldTimerManager().SetTimer(FlashTimer, this, &AEmberdeepEnemy::ResetHitFlash, 0.10f, false);
+	}
+}
+
+void AEmberdeepEnemy::MulticastSetAttackTelegraph_Implementation(bool bVisible, bool bEliteAttack)
+{
+	bAttackWindingUp = bVisible;
+	AttackTelegraph->SetRelativeScale3D(bEliteAttack
+		? FVector(3.2f, 3.2f, 0.025f)
+		: FVector(2.05f, 2.05f, 0.020f));
+	AttackTelegraph->SetHiddenInGame(!bVisible);
 }
 
 void AEmberdeepEnemy::ResetHitFlash()
@@ -312,11 +348,30 @@ void AEmberdeepEnemy::ApplyBoneColor(const FLinearColor& Color)
 	}
 }
 
+void AEmberdeepEnemy::ApplyEnemyStyle()
+{
+	SetActorScale3D(bIsElite ? FVector(1.25f) : FVector::OneVector);
+	ApplyBoneColor(bIsElite
+		? FLinearColor(0.34f, 0.10f, 0.055f)
+		: FLinearColor(0.48f, 0.42f, 0.31f));
+}
+
+void AEmberdeepEnemy::OnRep_EnemyStyle()
+{
+	ApplyEnemyStyle();
+}
+
+void AEmberdeepEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AEmberdeepEnemy, bIsElite);
+}
+
 void AEmberdeepEnemy::HandleDeath()
 {
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	AttackTelegraph->SetHiddenInGame(true);
+	MulticastSetAttackTelegraph(false, bIsElite);
 	SetActorScale3D(FVector(1.15f, 1.15f, 0.20f));
 
 	if (HasAuthority())

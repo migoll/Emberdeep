@@ -7,6 +7,7 @@
 class UCameraComponent;
 class UEmberdeepHealthComponent;
 class UInstancedStaticMeshComponent;
+class UMaterialInstanceDynamic;
 class USceneComponent;
 class USpringArmComponent;
 
@@ -64,7 +65,11 @@ private:
 	void Dodge();
 	void RequestAttack(bool bHeavyAttack);
 	void ExecuteAttack(bool bHeavyAttack, const FVector& AttackDirection);
-	void PlayAttackVisual(bool bHeavyAttack);
+	void PlayAttackVisual(bool bHeavyAttack, int32 HitCount);
+	void PlayHurtVisual(float Damage, bool bFatal);
+	void StartLocalCameraShake(float Strength, float Duration);
+	void UpdateLocalCameraShake(float DeltaSeconds);
+	void ResetHitVisual();
 	void ExecuteDodge(const FVector& DodgeDirection);
 	void ResetAttackVisual();
 	void EndDodge();
@@ -77,7 +82,13 @@ private:
 	void ServerPerformAttack(bool bHeavyAttack, FVector_NetQuantizeNormal RequestedAimDirection);
 
 	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastPlayAttackVisual(bool bHeavyAttack);
+	void MulticastPlayAttackVisual(bool bHeavyAttack, int32 HitCount);
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayDodgeVisual(FVector_NetQuantizeNormal DodgeDirection);
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayHurtVisual(float Damage, bool bFatal);
 
 	UFUNCTION(Server, Reliable)
 	void ServerDodge(FVector_NetQuantizeNormal RequestedDodgeDirection);
@@ -99,6 +110,11 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Visual")
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ThorgrimPaletteMeshes;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> ThorgrimMaterials;
+
+	TArray<FLinearColor> ThorgrimMaterialBaseColors;
 
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UEmberdeepHealthComponent> HealthComponent;
@@ -131,8 +147,12 @@ private:
 	float NextDodgeTime = 0.0f;
 	float NextAimReplicationTime = 0.0f;
 	float TargetOrthoWidth = 1100.0f;
+	float CameraShakeRemaining = 0.0f;
+	float CameraShakeDuration = 0.0f;
+	float CameraShakeStrength = 0.0f;
 	FVector LastSentAimDirection = FVector::ForwardVector;
 	bool bInvulnerable = false;
+	int32 AttackVisualSequence = 0;
 	FRotator ThorgrimAxeRestingRotation;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
