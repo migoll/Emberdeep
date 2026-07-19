@@ -1,0 +1,481 @@
+{
+  "meta": {
+    "format_version": "5.0",
+    "model_format": "free",
+    "box_uv": false
+  },
+  "name": "NotchedIronSword",
+  "model_identifier": "NotchedIronSword",
+  "resolution": {
+    "width": 144,
+    "height": 16
+  },
+  "elements": [
+    {
+      "name": "Steel__000",
+      "box_uv": false,
+      "render_order": "default",
+      "locked": false,
+      "allow_mirror_modeling": true,
+      "from": [
+        -2,
+        7,
+        -1
+      ],
+      "to": [
+        3,
+        24,
+        2
+      ],
+      "autouv": 0,
+      "color": 1,
+      "origin": [
+        0.5,
+        15.5,
+        0.5
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        }
+      },
+      "type": "cube",
+      "uuid": "433d7f8b-14f7-584c-814b-60fce2e01497"
+    },
+    {
+      "name": "Steel__001",
+      "box_uv": false,
+      "render_order": "default",
+      "locked": false,
+      "allow_mirror_modeling": true,
+      "from": [
+        -1,
+        24,
+        -1
+      ],
+      "to": [
+        2,
+        26,
+        2
+      ],
+      "autouv": 0,
+      "color": 1,
+      "origin": [
+        0.5,
+        25.0,
+        0.5
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16,
+            0,
+            32,
+            16
+          ],
+          "texture": 0
+        }
+      },
+      "type": "cube",
+      "uuid": "d84bfff9-5700-50fa-b1cf-ee73c3e2db53"
+    },
+    {
+      "name": "Ash__000",
+      "box_uv": false,
+      "render_order": "default",
+      "locked": false,
+      "allow_mirror_modeling": true,
+      "from": [
+        -2,
+        8,
+        2
+      ],
+      "to": [
+        3,
+        23,
+        3
+      ],
+      "autouv": 0,
+      "color": 2,
+      "origin": [
+        0.5,
+        15.5,
+        2.5
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            32,
+            0,
+            48,
+            16
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            32,
+            0,
+            48,
+            16
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            32,
+            0,
+            48,
+            16
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32,
+            0,
+            48,
+            16
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32,
+            0,
+            48,
+            16
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            32,
+            0,
+            48,
+            16
+          ],
+          "texture": 0
+        }
+      },
+      "type": "cube",
+      "uuid": "1a5c82c2-6243-54c7-a55d-d9ec8e3ff4b9"
+    },
+    {
+      "name": "Hide__000",
+      "box_uv": false,
+      "render_order": "default",
+      "locked": false,
+      "allow_mirror_modeling": true,
+      "from": [
+        -2,
+        -3,
+        -2
+      ],
+      "to": [
+        3,
+        3,
+        3
+      ],
+      "autouv": 0,
+      "color": 4,
+      "origin": [
+        0.5,
+        0.0,
+        0.5
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            64,
+            0,
+            80,
+            16
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            64,
+            0,
+            80,
+            16
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            64,
+            0,
+            80,
+            16
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            64,
+            0,
+            80,
+            16
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            64,
+            0,
+            80,
+            16
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            64,
+            0,
+            80,
+            16
+          ],
+          "texture": 0
+        }
+      },
+      "type": "cube",
+      "uuid": "a949dcc5-9259-51ec-9168-488836752be5"
+    },
+    {
+      "name": "Wood__000",
+      "box_uv": false,
+      "render_order": "default",
+      "locked": false,
+      "allow_mirror_modeling": true,
+      "from": [
+        -1,
+        3,
+        -1
+      ],
+      "to": [
+        2,
+        4,
+        2
+      ],
+      "autouv": 0,
+      "color": 7,
+      "origin": [
+        0.5,
+        3.5,
+        0.5
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            112,
+            0,
+            128,
+            16
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            112,
+            0,
+            128,
+            16
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            112,
+            0,
+            128,
+            16
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            112,
+            0,
+            128,
+            16
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            112,
+            0,
+            128,
+            16
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            112,
+            0,
+            128,
+            16
+          ],
+          "texture": 0
+        }
+      },
+      "type": "cube",
+      "uuid": "4c53da80-34b7-5df1-b65d-9b1cd8cffce3"
+    }
+  ],
+  "groups": [
+    {
+      "name": "Equipment",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "color": 0,
+      "uuid": "536e89b4-a530-5786-8295-3f754829b92d"
+    }
+  ],
+  "outliner": [
+    {
+      "name": "Equipment",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "color": 0,
+      "uuid": "536e89b4-a530-5786-8295-3f754829b92d",
+      "export": true,
+      "isOpen": true,
+      "locked": false,
+      "visibility": true,
+      "autouv": 0,
+      "children": [
+        "433d7f8b-14f7-584c-814b-60fce2e01497",
+        "d84bfff9-5700-50fa-b1cf-ee73c3e2db53",
+        "1a5c82c2-6243-54c7-a55d-d9ec8e3ff4b9",
+        "a949dcc5-9259-51ec-9168-488836752be5",
+        "4c53da80-34b7-5df1-b65d-9b1cd8cffce3"
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "name": "emberdeep_equipment_palette.png",
+      "folder": "",
+      "namespace": "",
+      "id": "0",
+      "particle": false,
+      "render_mode": "default",
+      "render_sides": "auto",
+      "frame_time": 1,
+      "frame_order_type": "loop",
+      "frame_order": "",
+      "frame_interpolate": false,
+      "visible": true,
+      "internal": true,
+      "saved": true,
+      "uuid": "16bf4b44-f533-5fdc-b8ef-e318a52aad52",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJAAAAAQCAIAAAB2lGE3AAAAfUlEQVR4nO3RsQ1AYAAFYYygkohENAqNRiP5RzCBIWyjkNhDJ0bQiDVMwAyvkpfcV193cVY2kSL0ndRXeSr149BK/bYuUr/fj9RPoZb6+Til/noLqU+kGr9jmBmGmWGYGYaZYZgZhplhmBmGmWGYGYaZYZgZhplhmBmGRV4+iC4LukKCFyYAAAAASUVORK5CYII="
+    }
+  ]
+}

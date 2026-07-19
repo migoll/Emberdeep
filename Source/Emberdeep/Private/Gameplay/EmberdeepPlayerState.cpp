@@ -96,7 +96,7 @@ void AEmberdeepPlayerState::InitializeStarterLoadout()
 	}
 
 	const FEmberdeepItemInstance StarterWeapon =
-		FEmberdeepItemCatalog::MakeLootItem(TEXT("NotchedIronAxe"), -100, 1);
+		FEmberdeepItemCatalog::MakeLootItem(TEXT("NotchedIronSword"), -100, 1);
 	const FEmberdeepItemInstance StarterArmor =
 		FEmberdeepItemCatalog::MakeLootItem(TEXT("PatchedHide"), -101, 1);
 	if (AddItem(StarterWeapon))

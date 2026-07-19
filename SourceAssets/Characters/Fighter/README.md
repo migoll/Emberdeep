@@ -35,9 +35,18 @@ Editing rules enforced by the converter:
 - Large Blockbench cuboids are an editing convenience only. The converter
   expands them back into identical 4 cm runtime cells.
 
-Close Unreal, then double-click `SYNC_TO_GAME.cmd`. It validates the grid,
-regenerates the preview, voxel data, and animation data, and builds the Unreal
-editor target.
+For the normal checked-in workflow, close Unreal and double-click
+`SYNC_TO_GAME.cmd`. It validates the grid, regenerates the preview, voxel data,
+and animation data, and builds the Unreal editor target.
+
+For live editing, double-click `LIVE_SYNC_TO_GAME.cmd` once. Leave its
+PowerShell window open, edit either **Edit** or **Animate** in Blockbench, and
+save the `.bbmodel` project with Ctrl+S. The open game updates in roughly a
+quarter of a second; no Unreal rebuild or manual sync is needed. Live Sync also
+watches all weapon and shield `.bbmodel` files under `SourceAssets/Equipment`.
+
+Live Sync is a preview loop. Before committing or sharing finished changes, run
+`SYNC_TO_GAME.cmd` once so the generated C++ runtime data is updated too.
 
 `MainHand` and `OffHand` contain preview geometry so attacks remain readable in
 Blockbench. Runtime equipment comes from the independent models under

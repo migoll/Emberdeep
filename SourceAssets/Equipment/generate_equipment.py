@@ -22,6 +22,7 @@ OFFHAND_DIR = ASSET_DIR / "OffHands"
 CPP_OUTPUT = REPO_ROOT / "Source" / "Emberdeep" / "Private" / "Gameplay" / "FighterEquipmentData.inl"
 
 WEAPONS = {
+    "NotchedIronSword": WEAPON_DIR / "notched_iron_sword.bbmodel",
     "NotchedIronAxe": WEAPON_DIR / "notched_iron_axe.bbmodel",
     "BonecarverAxe": WEAPON_DIR / "bonecarver_axe.bbmodel",
     "WardenCleaver": WEAPON_DIR / "warden_cleaver.bbmodel",
@@ -59,6 +60,18 @@ def notched_iron_axe() -> EquipmentModel:
     b.box("Steel", (-1, -7, 12), (1, -5, 14))
     b.box("Ash", (0, -8, 12), (0, -7, 14))
     b.box("Night", (-2, 4, 11), (2, 5, 14))
+    return b.model()
+
+
+def notched_iron_sword() -> EquipmentModel:
+    b = EquipmentBuilder()
+    b.box("Wood", (-1, -1, -5), (1, 1, 5))
+    b.box("Hide", (-2, -2, -4), (2, 2, 2))
+    b.box("Brass", (-2, -2, -6), (2, 2, -4))
+    b.box("Brass", (-1, -6, 4), (1, 6, 6))
+    b.box("Steel", (-1, -2, 7), (1, 2, 23))
+    b.box("Ash", (2, -2, 8), (2, 2, 22))
+    b.box("Steel", (-1, -1, 24), (1, 1, 25))
     return b.model()
 
 
@@ -215,6 +228,7 @@ def write_cpp(models: dict[str, EquipmentModel], shield: EquipmentModel) -> byte
 
 def bootstrap() -> None:
     definitions = {
+        "NotchedIronSword": notched_iron_sword(),
         "NotchedIronAxe": notched_iron_axe(), "BonecarverAxe": bonecarver_axe(),
         "WardenCleaver": warden_cleaver(), "EmberdeepOath": emberdeep_oath(),
     }

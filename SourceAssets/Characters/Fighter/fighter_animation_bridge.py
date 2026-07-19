@@ -33,8 +33,8 @@ EXPECTED_CLIPS = ("Idle", "Walk", "BasicAttack", "HeavyAttack", "Dodge")
 CLIP_SAMPLE_RATES = {
     "Idle": 18,
     "Walk": 18,
-    "BasicAttack": 24,
-    "HeavyAttack": 24,
+    "BasicAttack": 60,
+    "HeavyAttack": 60,
     "Dodge": 24,
 }
 

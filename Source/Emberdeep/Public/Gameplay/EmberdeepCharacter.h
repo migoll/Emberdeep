@@ -78,6 +78,7 @@ private:
 	void Dodge();
 	void TogglePlayableCharacter();
 	void RebuildPlayableVoxelCharacter(bool bUseThorgrim);
+	void PollLiveSyncData();
 	void RequestAttack(bool bHeavyAttack);
 	void ExecuteAttack(bool bHeavyAttack, const FVector& AttackDirection);
 	void PlayAttackVisual(bool bHeavyAttack, int32 HitCount, int32 ComboStep);
@@ -180,7 +181,7 @@ private:
 	FVector_NetQuantizeNormal ReplicatedAimDirection = FVector::ForwardVector;
 
 	UPROPERTY(ReplicatedUsing = OnRep_EquippedWeaponVisual)
-	FName EquippedWeaponVisualId = TEXT("NotchedIronAxe");
+	FName EquippedWeaponVisualId = TEXT("NotchedIronSword");
 
 	float NextAttackTime = 0.0f;
 	float LastBasicAttackTime = -10.0f;
@@ -211,9 +212,7 @@ private:
 	FRotator ThorgrimVisualRestingRotation = FRotator::ZeroRotator;
 	FVector ThorgrimBodyRestingLocation = FVector::ZeroVector;
 	FRotator ThorgrimAxeRestingRotation;
-	FVector ThorgrimAxeRestingLocation = FVector::ZeroVector;
 	FRotator ThorgrimShieldRestingRotation = FRotator::ZeroRotator;
-	FVector ThorgrimShieldRestingLocation = FVector::ZeroVector;
 	bool bBasicAttackHeld = false;
 	bool bBasicAttackQueued = false;
 	FVector QueuedBasicAttackDirection = FVector::ForwardVector;
@@ -228,6 +227,8 @@ private:
 	float ThorgrimDodgeDuration = 0.28f;
 	bool bThorgrimHeavyAttack = false;
 	bool bUsingThorgrimVisual = false;
+	int32 AppliedLiveSyncRevision = INDEX_NONE;
+	float NextLiveSyncCheckTime = 0.0f;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

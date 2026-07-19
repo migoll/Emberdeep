@@ -5,6 +5,7 @@ rig only animates the generic `MainHand` and `OffHand` anchors.
 
 Current weapon mapping:
 
+- `NotchedIronSword` -> `Weapons/notched_iron_sword.bbmodel`
 - `NotchedIronAxe` -> `Weapons/notched_iron_axe.bbmodel`
 - `BonecarverAxe` -> `Weapons/bonecarver_axe.bbmodel`
 - `WardenCleaver` -> `Weapons/warden_cleaver.bbmodel`

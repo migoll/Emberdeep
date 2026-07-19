@@ -28,6 +28,19 @@ FEmberdeepItemInstance FEmberdeepItemCatalog::MakeLootItem(
 {
 	const int32 SafeLevel = FMath::Max(1, ItemLevel);
 
+	if (DefinitionId == FName(TEXT("NotchedIronSword")))
+	{
+		FEmberdeepItemInstance Item = MakeBaseItem(
+			DefinitionId,
+			EntryId,
+			SafeLevel,
+			TEXT("Notched Iron Sword"),
+			EEmberdeepItemSlot::Weapon,
+			EEmberdeepItemRarity::Common);
+		Item.DamageBonus = 4.0f + SafeLevel * 1.5f;
+		return Item;
+	}
+
 	if (DefinitionId == FName(TEXT("NotchedIronAxe")))
 	{
 		FEmberdeepItemInstance Item = MakeBaseItem(
@@ -186,6 +199,7 @@ FEmberdeepItemInstance FEmberdeepItemCatalog::MakeRandomDrop(
 
 	static const FName CommonDefinitions[] =
 	{
+		TEXT("NotchedIronSword"),
 		TEXT("NotchedIronAxe"),
 		TEXT("BonecarverAxe"),
 		TEXT("PatchedHide"),

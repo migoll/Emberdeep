@@ -9,6 +9,7 @@
 #include "Engine/DamageEvents.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/StaticMesh.h"
+#include "Dom/JsonObject.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Gameplay/EmberdeepHealthComponent.h"
@@ -16,10 +17,15 @@
 #include "Gameplay/EmberdeepEnemy.h"
 #include "Gameplay/EmberdeepGameMode.h"
 #include "Gameplay/EmberdeepPlayerState.h"
+#include "HAL/FileManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "Net/UnrealNetwork.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Visual/EmberdeepVoxelStyle.h"
@@ -104,6 +110,33 @@ namespace
 		int32 CellCount;
 	};
 
+	struct FLivePlayableAnimationClip
+	{
+		FString Name;
+		bool bLoop = false;
+		float Duration = 0.0f;
+		float SamplesPerSecond = 24.0f;
+		int32 FrameCount = 0;
+		TArray<FPlayableVoxelBonePose> Frames;
+	};
+
+	struct FFighterLiveSyncState
+	{
+		bool bReady = false;
+		int32 Revision = 0;
+		FDateTime SourceTimestamp = FDateTime::MinValue();
+		TArray<FThorgrimVoxelCell> FighterCells;
+		TMap<FName, TArray<FThorgrimVoxelCell>> Weapons;
+		TArray<FThorgrimVoxelCell> ShieldCells;
+		TArray<FLivePlayableAnimationClip> Animations;
+		FVector MainHandPivot = FVector::ZeroVector;
+		FVector OffHandPivot = FVector::ZeroVector;
+		FQuat MainHandRotation = FQuat::Identity;
+		FQuat OffHandRotation = FQuat::Identity;
+	};
+
+	FFighterLiveSyncState GFighterLiveSync;
+
 	static constexpr int32 GPlayableAnimationBoneCount = 8;
 
 	const FThorgrimPartDefinition GThorgrimPartDefinitions[] =
@@ -138,6 +171,177 @@ namespace
 		{ EThorgrimPalette::Crimson, TEXT("Crimson"), {
 			FLinearColor(0.16f, 0.003f, 0.006f), FLinearColor(0.40f, 0.010f, 0.014f), FLinearColor(0.72f, 0.026f, 0.020f) } }
 	};
+
+	bool TryParseLivePalette(const FString& Name, EThorgrimPalette& OutPalette)
+	{
+		for (const FThorgrimPaletteDefinition& Definition : GThorgrimPaletteDefinitions)
+		{
+			if (Name.Equals(Definition.Name, ESearchCase::IgnoreCase))
+			{
+				OutPalette = Definition.Palette;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool ParseLiveCells(
+		const TArray<TSharedPtr<FJsonValue>>& Rows,
+		EThorgrimPart Part,
+		TArray<FThorgrimVoxelCell>& OutCells)
+	{
+		OutCells.Reset(Rows.Num());
+		for (const TSharedPtr<FJsonValue>& RowValue : Rows)
+		{
+			const TArray<TSharedPtr<FJsonValue>>& Row = RowValue->AsArray();
+			if (Row.Num() != 4)
+			{
+				return false;
+			}
+			EThorgrimPalette Palette = EThorgrimPalette::Night;
+			if (!TryParseLivePalette(Row[0]->AsString(), Palette))
+			{
+				return false;
+			}
+			OutCells.Add(FThorgrimVoxelCell{
+				Part,
+				Palette,
+				static_cast<int16>(FMath::RoundToInt(Row[1]->AsNumber())),
+				static_cast<int16>(FMath::RoundToInt(Row[2]->AsNumber())),
+				static_cast<int16>(FMath::RoundToInt(Row[3]->AsNumber())) });
+		}
+		return true;
+	}
+
+	bool ParseLiveVector(const TArray<TSharedPtr<FJsonValue>>& Values, FVector& OutVector)
+	{
+		if (Values.Num() != 3)
+		{
+			return false;
+		}
+		OutVector = FVector(Values[0]->AsNumber(), Values[1]->AsNumber(), Values[2]->AsNumber());
+		return true;
+	}
+
+	bool ParseLiveQuaternion(const TArray<TSharedPtr<FJsonValue>>& Values, FQuat& OutQuaternion)
+	{
+		if (Values.Num() != 4)
+		{
+			return false;
+		}
+		OutQuaternion = FQuat(
+			Values[0]->AsNumber(),
+			Values[1]->AsNumber(),
+			Values[2]->AsNumber(),
+			Values[3]->AsNumber()).GetNormalized();
+		return true;
+	}
+
+	bool RefreshFighterLiveSyncData()
+	{
+		const FString RuntimePath = FPaths::Combine(
+			FPaths::ProjectDir(), TEXT("Intermediate/LiveSync/fighter_runtime.json"));
+		const FDateTime Timestamp = IFileManager::Get().GetTimeStamp(*RuntimePath);
+		if (Timestamp == FDateTime::MinValue() || Timestamp <= GFighterLiveSync.SourceTimestamp)
+		{
+			return false;
+		}
+
+		FString JsonText;
+		if (!FFileHelper::LoadFileToString(JsonText, *RuntimePath))
+		{
+			return false;
+		}
+		TSharedPtr<FJsonObject> Root;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonText);
+		if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+		{
+			GFighterLiveSync.SourceTimestamp = Timestamp;
+			UE_LOG(LogEmberdeep, Warning, TEXT("EMBERDEEP_LIVE_SYNC Invalid runtime JSON"));
+			return false;
+		}
+
+		FFighterLiveSyncState NextState;
+		NextState.SourceTimestamp = Timestamp;
+		NextState.Revision = GFighterLiveSync.Revision + 1;
+		const TSharedPtr<FJsonObject> FighterObject = Root->GetObjectField(TEXT("fighter"));
+		if (!FighterObject.IsValid()
+			|| !ParseLiveCells(FighterObject->GetArrayField(TEXT("cells")), EThorgrimPart::Body, NextState.FighterCells)
+			|| !ParseLiveVector(FighterObject->GetArrayField(TEXT("main_hand_pivot")), NextState.MainHandPivot)
+			|| !ParseLiveVector(FighterObject->GetArrayField(TEXT("off_hand_pivot")), NextState.OffHandPivot)
+			|| !ParseLiveQuaternion(FighterObject->GetArrayField(TEXT("main_hand_rotation")), NextState.MainHandRotation)
+			|| !ParseLiveQuaternion(FighterObject->GetArrayField(TEXT("off_hand_rotation")), NextState.OffHandRotation))
+		{
+			GFighterLiveSync.SourceTimestamp = Timestamp;
+			UE_LOG(LogEmberdeep, Warning, TEXT("EMBERDEEP_LIVE_SYNC Invalid fighter data"));
+			return false;
+		}
+
+		const TSharedPtr<FJsonObject> WeaponsObject = Root->GetObjectField(TEXT("weapons"));
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Weapon : WeaponsObject->Values)
+		{
+			TArray<FThorgrimVoxelCell> Cells;
+			if (!ParseLiveCells(Weapon.Value->AsArray(), EThorgrimPart::Axe, Cells))
+			{
+				GFighterLiveSync.SourceTimestamp = Timestamp;
+				return false;
+			}
+			NextState.Weapons.Add(FName(Weapon.Key), MoveTemp(Cells));
+		}
+		if (!ParseLiveCells(Root->GetArrayField(TEXT("shield")), EThorgrimPart::Shield, NextState.ShieldCells))
+		{
+			GFighterLiveSync.SourceTimestamp = Timestamp;
+			return false;
+		}
+
+		for (const TSharedPtr<FJsonValue>& ClipValue : Root->GetArrayField(TEXT("animations")))
+		{
+			const TSharedPtr<FJsonObject> ClipObject = ClipValue->AsObject();
+			FLivePlayableAnimationClip Clip;
+			Clip.Name = ClipObject->GetStringField(TEXT("name"));
+			Clip.bLoop = ClipObject->GetBoolField(TEXT("loop"));
+			Clip.Duration = ClipObject->GetNumberField(TEXT("duration"));
+			Clip.SamplesPerSecond = ClipObject->GetNumberField(TEXT("sample_rate"));
+			const TArray<TSharedPtr<FJsonValue>>& FrameRows = ClipObject->GetArrayField(TEXT("frames"));
+			Clip.FrameCount = FrameRows.Num();
+			Clip.Frames.Reserve(Clip.FrameCount * GPlayableAnimationBoneCount);
+			for (const TSharedPtr<FJsonValue>& FrameValue : FrameRows)
+			{
+				const TArray<TSharedPtr<FJsonValue>>& Poses = FrameValue->AsArray();
+				if (Poses.Num() != GPlayableAnimationBoneCount)
+				{
+					GFighterLiveSync.SourceTimestamp = Timestamp;
+					return false;
+				}
+				for (const TSharedPtr<FJsonValue>& PoseValue : Poses)
+				{
+					const TArray<TSharedPtr<FJsonValue>>& Pose = PoseValue->AsArray();
+					if (Pose.Num() != 7)
+					{
+						GFighterLiveSync.SourceTimestamp = Timestamp;
+						return false;
+					}
+					Clip.Frames.Add(FPlayableVoxelBonePose{
+						FQuat(Pose[0]->AsNumber(), Pose[1]->AsNumber(), Pose[2]->AsNumber(), Pose[3]->AsNumber()).GetNormalized(),
+						FVector(Pose[4]->AsNumber(), Pose[5]->AsNumber(), Pose[6]->AsNumber()) });
+				}
+			}
+			NextState.Animations.Add(MoveTemp(Clip));
+		}
+		if (NextState.FighterCells.IsEmpty()
+			|| NextState.Weapons.IsEmpty()
+			|| NextState.Animations.Num() != 5)
+		{
+			GFighterLiveSync.SourceTimestamp = Timestamp;
+			return false;
+		}
+
+		NextState.bReady = true;
+		GFighterLiveSync = MoveTemp(NextState);
+		UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_LIVE_SYNC Loaded Revision=%d Cells=%d"),
+			GFighterLiveSync.Revision, GFighterLiveSync.FighterCells.Num());
+		return true;
+	}
 
 	int32 PositiveModuloCharacter(int32 Value, int32 Divisor)
 	{
@@ -418,6 +622,7 @@ AEmberdeepCharacter::AEmberdeepCharacter()
 void AEmberdeepCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	PollLiveSyncData();
 	UpdateVisualPresentation(DeltaSeconds);
 	UpdateThorgrimAnimation(DeltaSeconds);
 	if (HasAuthority()
@@ -502,9 +707,7 @@ void AEmberdeepCharacter::BeginPlay()
 	VisualFacingYaw = GetActorRotation().Yaw;
 	ThorgrimBodyRestingLocation = ThorgrimBodyRoot->GetRelativeLocation();
 	ThorgrimAxeRestingRotation = ThorgrimAxeRoot->GetRelativeRotation();
-	ThorgrimAxeRestingLocation = ThorgrimAxeRoot->GetRelativeLocation();
 	ThorgrimShieldRestingRotation = ThorgrimShieldRoot->GetRelativeRotation();
-	ThorgrimShieldRestingLocation = ThorgrimShieldRoot->GetRelativeLocation();
 	HealthComponent->OnDeath.AddUObject(this, &AEmberdeepCharacter::HandleDeath);
 
 	if (HasAuthority() && GetActorLocation().Z < 50.0f)
@@ -534,26 +737,53 @@ void AEmberdeepCharacter::TogglePlayableCharacter()
 	RebuildPlayableVoxelCharacter(!bUsingThorgrimVisual);
 }
 
+void AEmberdeepCharacter::PollLiveSyncData()
+{
+	if (!GetWorld() || GetWorld()->GetTimeSeconds() < NextLiveSyncCheckTime)
+	{
+		return;
+	}
+	NextLiveSyncCheckTime = GetWorld()->GetTimeSeconds() + 0.25f;
+	RefreshFighterLiveSyncData();
+	if (GFighterLiveSync.bReady && AppliedLiveSyncRevision != GFighterLiveSync.Revision)
+	{
+		AppliedLiveSyncRevision = GFighterLiveSync.Revision;
+		if (!bUsingThorgrimVisual)
+		{
+			RebuildPlayableVoxelCharacter(false);
+		}
+	}
+}
+
 void AEmberdeepCharacter::RebuildPlayableVoxelCharacter(bool bUseThorgrim)
 {
 	const FThorgrimVoxelCell* VoxelCells = bUseThorgrim
 		? ThorgrimVoxelData::GThorgrimVoxelCells
 		: FighterVoxelData::GThorgrimVoxelCells;
-	const int32 VoxelCount = bUseThorgrim
+	int32 VoxelCount = bUseThorgrim
 		? ThorgrimVoxelData::GThorgrimVoxelCount
 		: FighterVoxelData::GThorgrimVoxelCount;
-	const FVector AxePivot = bUseThorgrim
+	FVector AxePivot = bUseThorgrim
 		? ThorgrimVoxelData::GThorgrimAxePivot
 		: FighterVoxelData::GThorgrimAxePivot;
-	const FVector ShieldPivot = bUseThorgrim
+	FVector ShieldPivot = bUseThorgrim
 		? ThorgrimVoxelData::GThorgrimShieldPivot
 		: FighterVoxelData::GThorgrimShieldPivot;
-	const FQuat AxeRotation = bUseThorgrim
+	FQuat AxeRotation = bUseThorgrim
 		? ThorgrimVoxelData::GPlayableAxeRestingRotation
 		: FighterVoxelData::GPlayableAxeRestingRotation;
-	const FQuat ShieldRotation = bUseThorgrim
+	FQuat ShieldRotation = bUseThorgrim
 		? ThorgrimVoxelData::GPlayableShieldRestingRotation
 		: FighterVoxelData::GPlayableShieldRestingRotation;
+	if (!bUseThorgrim && GFighterLiveSync.bReady)
+	{
+		VoxelCells = GFighterLiveSync.FighterCells.GetData();
+		VoxelCount = GFighterLiveSync.FighterCells.Num();
+		AxePivot = GFighterLiveSync.MainHandPivot;
+		ShieldPivot = GFighterLiveSync.OffHandPivot;
+		AxeRotation = GFighterLiveSync.MainHandRotation;
+		ShieldRotation = GFighterLiveSync.OffHandRotation;
+	}
 
 	for (TArray<FTransform>& RestTransforms : ThorgrimRestTransformsByMesh)
 	{
@@ -589,17 +819,41 @@ void AEmberdeepCharacter::RebuildPlayableVoxelCharacter(bool bUseThorgrim)
 	int32 EquipmentVoxelCount = 0;
 	if (!bUseThorgrim)
 	{
-		const FPlayableEquipmentVisual& MainHand =
-			FighterEquipmentData::FindMainHandVisual(EquippedWeaponVisualId);
-		for (int32 VoxelIndex = 0; VoxelIndex < MainHand.CellCount; ++VoxelIndex)
+		if (GFighterLiveSync.bReady)
 		{
-			AddVoxel(MainHand.Cells[VoxelIndex]);
+			const TArray<FThorgrimVoxelCell>* MainHand = GFighterLiveSync.Weapons.Find(EquippedWeaponVisualId);
+			if (!MainHand)
+			{
+				MainHand = GFighterLiveSync.Weapons.Find(FName(TEXT("NotchedIronSword")));
+			}
+			if (MainHand)
+			{
+				for (const FThorgrimVoxelCell& Voxel : *MainHand)
+				{
+					AddVoxel(Voxel);
+				}
+				EquipmentVoxelCount += MainHand->Num();
+			}
+			for (const FThorgrimVoxelCell& Voxel : GFighterLiveSync.ShieldCells)
+			{
+				AddVoxel(Voxel);
+			}
+			EquipmentVoxelCount += GFighterLiveSync.ShieldCells.Num();
 		}
-		for (int32 VoxelIndex = 0; VoxelIndex < FighterEquipmentData::GDefaultOffHandVisual.CellCount; ++VoxelIndex)
+		else
 		{
-			AddVoxel(FighterEquipmentData::GDefaultOffHandVisual.Cells[VoxelIndex]);
+			const FPlayableEquipmentVisual& MainHand =
+				FighterEquipmentData::FindMainHandVisual(EquippedWeaponVisualId);
+			for (int32 VoxelIndex = 0; VoxelIndex < MainHand.CellCount; ++VoxelIndex)
+			{
+				AddVoxel(MainHand.Cells[VoxelIndex]);
+			}
+			for (int32 VoxelIndex = 0; VoxelIndex < FighterEquipmentData::GDefaultOffHandVisual.CellCount; ++VoxelIndex)
+			{
+				AddVoxel(FighterEquipmentData::GDefaultOffHandVisual.Cells[VoxelIndex]);
+			}
+			EquipmentVoxelCount = MainHand.CellCount + FighterEquipmentData::GDefaultOffHandVisual.CellCount;
 		}
-		EquipmentVoxelCount = MainHand.CellCount + FighterEquipmentData::GDefaultOffHandVisual.CellCount;
 	}
 	for (int32 MeshIndex = 0; MeshIndex < ThorgrimPaletteMeshes.Num(); ++MeshIndex)
 	{
@@ -680,9 +934,9 @@ void AEmberdeepCharacter::ApplySteppedVisualPose(bool bForce)
 		return;
 	}
 
-	// The simulation stays full-rate. Only the rigid visual clusters hold poses at
-	// 12 fps, matching the low-resolution miniature presentation in the target.
-	constexpr float VisualPoseRate = 12.0f;
+	// The simulation stays full-rate. The rigid visual clusters hold poses at
+	// 24 fps, matching the Blockbench clips while keeping a stepped voxel feel.
+	constexpr float VisualPoseRate = 24.0f;
 	const float Now = GetWorld()->GetTimeSeconds();
 	const int32 PoseStep = FMath::FloorToInt(Now * VisualPoseRate);
 	if (!bForce && PoseStep == LastVisualPoseStep)
@@ -712,25 +966,13 @@ void AEmberdeepCharacter::ApplySteppedVisualPose(bool bForce)
 		0.0f,
 		LocalVelocity.Y * 4.2f * MoveAlpha + Gait * 1.2f * MoveAlpha);
 	FVector BodyOffset(0.0f, 0.0f, IdleBreath * (1.0f - MoveAlpha) * 0.65f);
-	FRotator AxeRotation = ThorgrimAxeRestingRotation
-		+ FRotator(Gait * 1.5f * MoveAlpha, 0.0f, -Gait * 4.5f * MoveAlpha);
-	FVector AxeOffset = ThorgrimAxeRestingLocation + FVector(0.0f, 0.0f, -Gait * 1.4f * MoveAlpha);
-	FRotator ShieldRotation = ThorgrimShieldRestingRotation
-		+ FRotator(-Gait * 1.0f * MoveAlpha, 0.0f, Gait * 3.0f * MoveAlpha);
-	FVector ShieldOffset = ThorgrimShieldRestingLocation + FVector(0.0f, 0.0f, Gait * 1.0f * MoveAlpha);
 
 	const float AttackElapsed = Now - VisualAttackStartTime;
 	if (AttackElapsed >= 0.0f && AttackElapsed < VisualAttackDuration)
 	{
 		const float AttackAlpha = FMath::Clamp(AttackElapsed / FMath::Max(VisualAttackDuration, 0.01f), 0.0f, 1.0f);
 		const float Recovery = FMath::InterpEaseOut(1.0f, 0.0f, AttackAlpha, bVisualHeavyAttack ? 2.8f : 3.8f);
-		const bool bFinisher = !bVisualHeavyAttack && VisualComboStep == 2;
 		const float SwingDirection = bVisualHeavyAttack || VisualComboStep % 2 == 1 ? 1.0f : -1.0f;
-		const float SwingDegrees = bVisualHeavyAttack ? 132.0f : bFinisher ? 112.0f : 91.0f;
-		AxeRotation = ThorgrimAxeRestingRotation
-			+ FRotator(-12.0f * Recovery, SwingDirection * 8.0f * Recovery, SwingDegrees * SwingDirection * Recovery);
-		AxeOffset = ThorgrimAxeRestingLocation + FVector(10.0f * Recovery, 0.0f, 5.0f * Recovery);
-		ShieldRotation = ThorgrimShieldRestingRotation + FRotator(0.0f, -6.0f * SwingDirection * Recovery, -8.0f * SwingDirection * Recovery);
 		VisualRotation.Pitch -= (bVisualHeavyAttack ? 9.0f : 5.5f) * Recovery;
 		VisualRotation.Yaw -= 7.0f * SwingDirection * Recovery;
 		VisualOffset.X += (bVisualHeavyAttack ? 9.0f : 5.0f) * Recovery;
@@ -746,8 +988,6 @@ void AEmberdeepCharacter::ApplySteppedVisualPose(bool bForce)
 		VisualRotation.Pitch -= LocalDodge.X * 18.0f * DodgeEnvelope;
 		VisualRotation.Roll += LocalDodge.Y * 21.0f * DodgeEnvelope;
 		VisualOffset.Z -= 4.0f * DodgeEnvelope;
-		AxeRotation += FRotator(0.0f, 0.0f, -12.0f * LocalDodge.Y * DodgeEnvelope);
-		ShieldRotation += FRotator(0.0f, 0.0f, 10.0f * LocalDodge.Y * DodgeEnvelope);
 	}
 
 	const float HurtElapsed = Now - VisualHurtStartTime;
@@ -774,10 +1014,9 @@ void AEmberdeepCharacter::ApplySteppedVisualPose(bool bForce)
 		VisualFacingYaw + ThorgrimVisualRestingRotation.Yaw + VisualRotation.Yaw,
 		ThorgrimVisualRestingRotation.Roll + VisualRotation.Roll));
 	ThorgrimBodyRoot->SetRelativeLocation(ThorgrimBodyRestingLocation + BodyOffset);
-	ThorgrimAxeRoot->SetRelativeLocation(AxeOffset);
-	ThorgrimAxeRoot->SetRelativeRotation(AxeRotation);
-	ThorgrimShieldRoot->SetRelativeLocation(ShieldOffset);
-	ThorgrimShieldRoot->SetRelativeRotation(ShieldRotation);
+	// UpdateThorgrimAnimation is the sole writer for equipment transforms. Keeping
+	// the 12 fps presentation layer away from the 24 fps Blockbench rig prevents
+	// the weapon from alternating between two poses after an attack reset.
 }
 
 void AEmberdeepCharacter::UpdateMouseAim()
@@ -1055,12 +1294,14 @@ void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack, int32 HitCount, in
 
 void AEmberdeepCharacter::UpdateThorgrimAnimation(float DeltaSeconds)
 {
-	static constexpr float PoseUpdateRate = 24.0f;
-	static constexpr float PoseInterval = 1.0f / PoseUpdateRate;
 	ThorgrimAnimationTime += DeltaSeconds;
 	ThorgrimPoseAccumulator += DeltaSeconds;
 	ThorgrimAttackTimeRemaining = FMath::Max(0.0f, ThorgrimAttackTimeRemaining - DeltaSeconds);
 	ThorgrimDodgeTimeRemaining = FMath::Max(0.0f, ThorgrimDodgeTimeRemaining - DeltaSeconds);
+	const bool bAttackPoseActive = ThorgrimAttackTimeRemaining > 0.0f
+		&& ThorgrimAttackDuration > KINDA_SMALL_NUMBER;
+	const float PoseUpdateRate = bAttackPoseActive ? 60.0f : 24.0f;
+	const float PoseInterval = 1.0f / PoseUpdateRate;
 	if (ThorgrimPoseAccumulator < PoseInterval)
 	{
 		return;
@@ -1157,20 +1398,28 @@ void AEmberdeepCharacter::UpdateThorgrimAnimation(float DeltaSeconds)
 
 	if (!bUsingThorgrimVisual)
 	{
+		const bool bUseLiveAnimations = GFighterLiveSync.bReady
+			&& GFighterLiveSync.Animations.Num() == 5;
+		const auto GetClipDuration = [bUseLiveAnimations](int32 ClipIndex)
+		{
+			return bUseLiveAnimations
+				? GFighterLiveSync.Animations[ClipIndex].Duration
+				: FighterVoxelData::GPlayableAnimationClips[ClipIndex].Duration;
+		};
 		int32 ClipIndex = FighterVoxelData::GPlayableIdleClipIndex;
-		float ClipTime = FMath::Fmod(ThorgrimAnimationTime, FighterVoxelData::GPlayableAnimationClips[ClipIndex].Duration);
+		float ClipTime = FMath::Fmod(ThorgrimAnimationTime, GetClipDuration(ClipIndex));
 		if (ThorgrimDodgeTimeRemaining > 0.0f && ThorgrimDodgeDuration > KINDA_SMALL_NUMBER)
 		{
 			ClipIndex = FighterVoxelData::GPlayableDodgeClipIndex;
 			ClipTime = (1.0f - ThorgrimDodgeTimeRemaining / ThorgrimDodgeDuration)
-				* FighterVoxelData::GPlayableAnimationClips[ClipIndex].Duration;
+				* GetClipDuration(ClipIndex);
 		}
 		else if (bAttacking)
 		{
 			ClipIndex = bThorgrimHeavyAttack
 				? FighterVoxelData::GPlayableHeavyAttackClipIndex
 				: FighterVoxelData::GPlayableBasicAttackClipIndex;
-			ClipTime = AttackAlpha * FighterVoxelData::GPlayableAnimationClips[ClipIndex].Duration;
+			ClipTime = AttackAlpha * GetClipDuration(ClipIndex);
 		}
 		else if (bMoving)
 		{
@@ -1179,13 +1428,20 @@ void AEmberdeepCharacter::UpdateThorgrimAnimation(float DeltaSeconds)
 				FVector2D(0.0f, GetCharacterMovement()->MaxWalkSpeed), FVector2D(0.65f, 1.5f), Speed);
 			ClipTime = FMath::Fmod(
 				ThorgrimAnimationTime * SpeedScale,
-				FighterVoxelData::GPlayableAnimationClips[ClipIndex].Duration);
+				GetClipDuration(ClipIndex));
 		}
 
-		const FPlayableVoxelAnimationClip& Clip = FighterVoxelData::GPlayableAnimationClips[ClipIndex];
+		const FPlayableVoxelAnimationClip& CompiledClip = FighterVoxelData::GPlayableAnimationClips[ClipIndex];
+		const FLivePlayableAnimationClip* LiveClip = bUseLiveAnimations
+			? &GFighterLiveSync.Animations[ClipIndex]
+			: nullptr;
+		const float SamplesPerSecond = LiveClip ? LiveClip->SamplesPerSecond : CompiledClip.SamplesPerSecond;
+		const int32 FrameCount = LiveClip ? LiveClip->FrameCount : CompiledClip.FrameCount;
 		const int32 FrameIndex = FMath::Clamp(
-			FMath::FloorToInt(ClipTime * Clip.SamplesPerSecond), 0, Clip.FrameCount - 1);
-		const FPlayableVoxelBonePose* Poses = Clip.Frames + FrameIndex * GPlayableAnimationBoneCount;
+			FMath::FloorToInt(ClipTime * SamplesPerSecond), 0, FrameCount - 1);
+		const FPlayableVoxelBonePose* Poses = LiveClip
+			? LiveClip->Frames.GetData() + FrameIndex * GPlayableAnimationBoneCount
+			: CompiledClip.Frames + FrameIndex * GPlayableAnimationBoneCount;
 		BodyRotation = Poses[0].Rotation.Rotator();
 		BodyTranslation = Poses[0].Translation;
 		for (int32 BoneIndex = 1; BoneIndex < static_cast<int32>(EThorgrimRigidBone::Count); ++BoneIndex)
@@ -1336,10 +1592,7 @@ void AEmberdeepCharacter::ResetAttackVisual()
 	ApplySteppedVisualPose(true);
 	ThorgrimAttackTimeRemaining = 0.0f;
 	ThorgrimAttackDuration = 0.0f;
-	ThorgrimAxeRoot->SetRelativeLocation(PlayableAxePivot);
-	ThorgrimAxeRoot->SetRelativeRotation(ThorgrimAxeRestingRotation);
-	ThorgrimShieldRoot->SetRelativeLocation(PlayableShieldPivot);
-	ThorgrimShieldRoot->SetRelativeRotation(ThorgrimShieldRestingRotation);
+	ThorgrimPoseAccumulator = 1.0f;
 }
 
 void AEmberdeepCharacter::EndDodge()
@@ -1510,7 +1763,7 @@ void AEmberdeepCharacter::ApplyEquipmentStats()
 	if (AEmberdeepPlayerState* RunState = GetPlayerState<AEmberdeepPlayerState>())
 	{
 		const FEmberdeepItemInstance* Weapon = RunState->GetEquippedItem(EEmberdeepItemSlot::Weapon);
-		const FName DesiredWeaponVisual = Weapon ? Weapon->DefinitionId : FName(TEXT("NotchedIronAxe"));
+		const FName DesiredWeaponVisual = Weapon ? Weapon->DefinitionId : FName(TEXT("NotchedIronSword"));
 		if (EquippedWeaponVisualId != DesiredWeaponVisual)
 		{
 			EquippedWeaponVisualId = DesiredWeaponVisual;

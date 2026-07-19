@@ -8,6 +8,7 @@ if not exist "%BLOCKBENCH%" (
     exit /b 1
 )
 
+start "" "%BLOCKBENCH%" "%~dp0Weapons\notched_iron_sword.bbmodel"
 start "" "%BLOCKBENCH%" "%~dp0Weapons\notched_iron_axe.bbmodel"
 start "" "%BLOCKBENCH%" "%~dp0Weapons\bonecarver_axe.bbmodel"
 start "" "%BLOCKBENCH%" "%~dp0Weapons\warden_cleaver.bbmodel"
