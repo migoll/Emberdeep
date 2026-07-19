@@ -143,7 +143,7 @@ def watch() -> None:
             raise SystemExit("Emberdeep Live Sync is already running")
 
     last_signature: tuple[int, ...] | None = None
-    print("Emberdeep Live Sync is watching Blockbench files. Save with Ctrl+S to update the game.", flush=True)
+    print("Emberdeep Live Sync is watching Blockbench files. Save with Ctrl+Alt+S to update the game.", flush=True)
     while True:
         try:
             signature = source_signature()

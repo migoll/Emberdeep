@@ -99,9 +99,9 @@ AEmberdeepHUD::AEmberdeepHUD()
 		TEXT("/Game/Emberdeep/UI/T_HUDOrnaments.T_HUDOrnaments"));
 	HudOrnaments = OrnamentTexture.Object;
 
-	static ConstructorHelpers::FObjectFinder<UTexture2D> ConnectedHudTexture(
-		TEXT("/Game/Emberdeep/UI/T_CombatHUD_TargetMatched.T_CombatHUD_TargetMatched"));
-	ConnectedCombatHud = ConnectedHudTexture.Object;
+	static ConstructorHelpers::FObjectFinder<UTexture2D> ActionBarFrameTexture(
+		TEXT("/Game/Emberdeep/UI/T_ActionBarFrame_v1.T_ActionBarFrame_v1"));
+	FighterActionBarFrame = ActionBarFrameTexture.Object;
 
 	static ConstructorHelpers::FObjectFinder<UTexture2D> PartyRowTexture(
 		TEXT("/Game/Emberdeep/UI/T_PartyRow_TargetMatched.T_PartyRow_TargetMatched"));
@@ -111,9 +111,18 @@ AEmberdeepHUD::AEmberdeepHUD()
 		TEXT("/Game/Emberdeep/UI/T_MinimapFrame_TargetMatched.T_MinimapFrame_TargetMatched"));
 	MinimapFrame = MinimapFrameTexture.Object;
 
-	static ConstructorHelpers::FObjectFinder<UTexture2D> AbilityAtlasTexture(
-		TEXT("/Game/Emberdeep/UI/T_FighterAbilityAtlas.T_FighterAbilityAtlas"));
-	FighterAbilityAtlas = AbilityAtlasTexture.Object;
+	static ConstructorHelpers::FObjectFinder<UTexture2D> ChargeTexture(
+		TEXT("/Game/Emberdeep/UI/T_FighterAbility_01_Charge.T_FighterAbility_01_Charge"));
+	FighterChargeIcon = ChargeTexture.Object;
+	static ConstructorHelpers::FObjectFinder<UTexture2D> AxeStrikeTexture(
+		TEXT("/Game/Emberdeep/UI/T_FighterAbility_02_AxeStrike.T_FighterAbility_02_AxeStrike"));
+	FighterAxeStrikeIcon = AxeStrikeTexture.Object;
+	static ConstructorHelpers::FObjectFinder<UTexture2D> ShieldSlamTexture(
+		TEXT("/Game/Emberdeep/UI/T_FighterAbility_03_ShieldSlam.T_FighterAbility_03_ShieldSlam"));
+	FighterShieldSlamIcon = ShieldSlamTexture.Object;
+	static ConstructorHelpers::FObjectFinder<UTexture2D> WhirlwindTexture(
+		TEXT("/Game/Emberdeep/UI/T_FighterAbility_04_Whirlwind.T_FighterAbility_04_Whirlwind"));
+	FighterWhirlwindIcon = WhirlwindTexture.Object;
 }
 
 void AEmberdeepHUD::DrawHUD()
@@ -419,14 +428,17 @@ void AEmberdeepHUD::DrawMinimapAndObjective()
 
 void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 {
-	constexpr float DesignWidth = 2157.0f;
-	constexpr float DesignHeight = 389.0f;
-	// The reference occupies about 58% of a 1536x1024 frame. Deriving width
-	// primarily from viewport height keeps that same physical weight at 720p,
-	// 1080p and 1440p while the width clamps protect narrow and ultrawide views.
-	const float MaximumWidth = Canvas->ClipX * 0.63f;
-	const float MinimumWidth = FMath::Min(520.0f, MaximumWidth);
-	const float TargetWidth = FMath::Clamp(Canvas->ClipY * 0.88f, MinimumWidth, MaximumWidth);
+	// The imported source retains transparent padding. These design dimensions
+	// and UVs describe its exact visible alpha crop: (7,187)-(1908,623).
+	constexpr float DesignWidth = 1901.0f;
+	constexpr float DesignHeight = 436.0f;
+	constexpr float FrameU = 7.0f / 1912.0f;
+	constexpr float FrameV = 187.0f / 823.0f;
+	constexpr float FrameUWidth = 1901.0f / 1912.0f;
+	constexpr float FrameVHeight = 436.0f / 823.0f;
+	const float MaximumWidth = Canvas->ClipX * 0.84f;
+	const float MinimumWidth = FMath::Min(720.0f, MaximumWidth);
+	const float TargetWidth = FMath::Clamp(Canvas->ClipY * 1.28f, MinimumWidth, MaximumWidth);
 	const float Scale = TargetWidth / DesignWidth;
 	const float HudWidth = DesignWidth * Scale;
 	const float HudHeight = DesignHeight * Scale;
@@ -444,16 +456,19 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 
 	// All live layers use the exact native coordinates of the new project-bound
 	// texture. The authored frame is drawn last so its rims mask every fill.
-	const FVector2D HealthCenter = DesignPoint(267.0f, 176.0f);
-	const FVector2D ResourceCenter = DesignPoint(1888.0f, 176.0f);
+	const FVector2D HealthCenter = DesignPoint(205.0f, 224.5f);
+	const FVector2D ResourceCenter = DesignPoint(1697.5f, 224.5f);
 
 	const FVector4 SlotBounds[] =
 	{
-		FVector4(560.0f, 132.0f, 202.0f, 156.0f),
-		FVector4(817.0f, 132.0f, 188.0f, 156.0f),
-		FVector4(1057.0f, 133.0f, 189.0f, 155.0f),
-		FVector4(1297.0f, 132.0f, 187.0f, 156.0f),
-		FVector4(1536.0f, 133.0f, 72.0f, 155.0f)
+		FVector4(427.0f, 190.0f, 108.0f, 119.0f),
+		FVector4(566.0f, 191.0f, 105.0f, 118.0f),
+		FVector4(703.0f, 191.0f, 104.0f, 118.0f),
+		FVector4(838.0f, 191.0f, 103.0f, 118.0f),
+		FVector4(973.0f, 191.0f, 104.0f, 118.0f),
+		FVector4(1109.0f, 191.0f, 102.0f, 118.0f),
+		FVector4(1243.0f, 191.0f, 100.0f, 118.0f),
+		FVector4(1375.0f, 191.0f, 101.0f, 118.0f)
 	};
 	const FLinearColor SlotColors[] =
 	{
@@ -461,16 +476,19 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 		FLinearColor(0.68f, 0.075f, 0.012f),
 		FLinearColor(0.10f, 0.32f, 0.75f),
 		FLinearColor(0.10f, 0.085f, 0.13f),
-		FLinearColor(0.42f, 0.025f, 0.018f)
+		FLinearColor(0.42f, 0.025f, 0.018f),
+		FLinearColor(0.08f, 0.07f, 0.06f),
+		FLinearColor(0.08f, 0.07f, 0.06f),
+		FLinearColor(0.08f, 0.07f, 0.06f)
 	};
-	DrawOrb(HealthCenter, 124.0f * Scale, Character->GetHealthComponent()->GetHealthNormalized(), FLinearColor(0.70f, 0.015f, 0.008f));
-	DrawOrb(ResourceCenter, 124.0f * Scale, Character->GetDodgeCooldownNormalized(), FLinearColor(0.018f, 0.20f, 0.74f));
+	DrawOrb(HealthCenter, 126.0f * Scale, Character->GetHealthComponent()->GetHealthNormalized(), FLinearColor(0.70f, 0.015f, 0.008f));
+	DrawOrb(ResourceCenter, 126.0f * Scale, Character->GetDodgeCooldownNormalized(), FLinearColor(0.018f, 0.20f, 0.74f));
 
 	// This recessed channel is permanently reserved for experience progress.
-	const float ExperienceTrackX = HudX + 509.0f * Scale;
-	const float ExperienceTrackY = HudY + 344.0f * Scale;
-	const float ExperienceTrackWidth = 1138.0f * Scale;
-	const float ExperienceTrackHeight = 14.0f * Scale;
+	const float ExperienceTrackX = HudX + 577.0f * Scale;
+	const float ExperienceTrackY = HudY + 409.0f * Scale;
+	const float ExperienceTrackWidth = 748.0f * Scale;
+	const float ExperienceTrackHeight = 7.0f * Scale;
 	DrawRect(FLinearColor(0.055f, 0.035f, 0.012f, 0.98f), ExperienceTrackX, ExperienceTrackY, ExperienceTrackWidth, ExperienceTrackHeight);
 	DrawRect(
 		FLinearColor(0.95f, 0.50f, 0.045f, 0.98f),
@@ -478,26 +496,41 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 		ExperienceTrackY,
 		ExperienceTrackWidth * Character->GetExperienceNormalized(),
 		ExperienceTrackHeight);
+	UTexture2D* SlotIcons[] =
+	{
+		FighterAxeStrikeIcon,
+		FighterShieldSlamIcon,
+		FighterChargeIcon,
+		FighterWhirlwindIcon,
+		nullptr,
+		nullptr,
+		nullptr,
+		nullptr
+	};
 	for (int32 SlotIndex = 0; SlotIndex < UE_ARRAY_COUNT(SlotBounds); ++SlotIndex)
 	{
 		const FVector4& Slot = SlotBounds[SlotIndex];
-		const float Inset = 5.0f * Scale;
+		const float Inset = 0.0f;
 		const float IconX = HudX + Slot.X * Scale + Inset;
 		const float IconY = HudY + Slot.Y * Scale + Inset;
 		const float IconWidth = Slot.Z * Scale - Inset * 2.0f;
 		const float IconHeight = Slot.W * Scale - Inset * 2.0f;
-		if (FighterAbilityAtlas)
+		if (SlotIcons[SlotIndex])
 		{
+			// The square source paintings include deliberate black presentation
+			// padding. Crop that padding slightly so the ability motif reads at
+			// gameplay scale while the metal socket still masks its outer edge.
+			constexpr float IconUvInset = 0.15f;
 			DrawTexture(
-				FighterAbilityAtlas,
+				SlotIcons[SlotIndex],
 				IconX,
 				IconY,
 				IconWidth,
 				IconHeight,
-				(35.0f + SlotIndex * 390.0f) / 1983.0f,
-				200.0f / 793.0f,
-				351.0f / 1983.0f,
-				378.0f / 793.0f,
+				IconUvInset,
+				IconUvInset,
+				1.0f - IconUvInset * 2.0f,
+				1.0f - IconUvInset * 2.0f,
 				FLinearColor::White,
 				BLEND_Translucent);
 		}
@@ -518,14 +551,8 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 		}
 		else if (SlotIndex == 0)
 		{
-			const float CooldownRemaining = 1.0f - Character->GetBasicAttackCooldownNormalized();
-			DrawRadialCooldown(
-				FVector2D(IconX + IconWidth * 0.5f, IconY + IconHeight * 0.5f),
-				FVector2D(IconWidth * 0.5f, IconHeight * 0.5f),
-				CooldownRemaining);
-
 			const float Feedback = Character->GetBasicAttackFeedbackNormalized();
-			const bool bQueued = Character->IsBasicAttackQueued() && CooldownRemaining > 0.0f;
+			const bool bQueued = Character->IsBasicAttackQueued();
 			if (Feedback > 0.0f || bQueued)
 			{
 				const float Border = FMath::Max(2.0f, 7.0f * Scale);
@@ -542,29 +569,37 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 		}
 	}
 
-	if (ConnectedCombatHud)
+	if (FighterActionBarFrame)
 	{
 		DrawTexture(
-			ConnectedCombatHud,
+			FighterActionBarFrame,
 			HudX,
 			HudY,
 			HudWidth,
 			HudHeight,
-			0.0f,
-			0.0f,
-			1.0f,
-			1.0f,
+			FrameU,
+			FrameV,
+			FrameUWidth,
+			FrameVHeight,
 			FLinearColor::White,
 			BLEND_Translucent);
 	}
 
-	const TCHAR* AbilityKeys[] = {TEXT("LMB"), TEXT("RMB"), TEXT("SHIFT"), TEXT("Q"), TEXT("3")};
+	const TCHAR* AbilityKeys[] =
+	{
+		TEXT("LMB"), TEXT("RMB"), TEXT("SHIFT"), TEXT("Q"),
+		TEXT(""), TEXT(""), TEXT(""), TEXT("")
+	};
 	for (int32 SlotIndex = 0; SlotIndex < UE_ARRAY_COUNT(SlotBounds); ++SlotIndex)
 	{
+		if (AbilityKeys[SlotIndex][0] == 0)
+		{
+			continue;
+		}
 		const FVector4& Slot = SlotBounds[SlotIndex];
 		const float KeyCenterX = HudX + (Slot.X + Slot.Z * 0.5f) * Scale;
-		const float KeyY = HudY + 264.0f * Scale;
-		const float BadgeWidth = FMath::Min(54.0f, Slot.Z - 10.0f) * Scale;
+		const float KeyY = HudY + (Slot.Y + Slot.W - 21.0f) * Scale;
+		const float BadgeWidth = FMath::Min(48.0f, Slot.Z - 10.0f) * Scale;
 		DrawRect(
 			FLinearColor(0.015f, 0.012f, 0.012f, 0.82f),
 			KeyCenterX - BadgeWidth * 0.5f,
@@ -577,20 +612,20 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 			KeyCenterX,
 			KeyY,
 			GEngine->GetSmallFont(),
-			FMath::Clamp(Scale * 2.0f, 0.58f, 0.90f));
+			FMath::Clamp(Scale * 1.55f, 0.52f, 0.82f));
 	}
 	DrawCenteredText(
 		FString::Printf(TEXT("%.0f / %.0f"), Character->GetHealthComponent()->GetCurrentHealth(), Character->GetHealthComponent()->GetMaxHealth()),
 		FLinearColor::White,
 		HealthCenter.X,
-		HudY + 323.0f * Scale,
+		HudY + 346.0f * Scale,
 		GEngine->GetSmallFont(),
 		FMath::Clamp(Scale * 1.9f, 0.58f, 0.84f));
 	DrawCenteredText(
 		TEXT("100 / 100"),
 		FLinearColor::White,
 		ResourceCenter.X,
-		HudY + 323.0f * Scale,
+		HudY + 346.0f * Scale,
 		GEngine->GetSmallFont(),
 		FMath::Clamp(Scale * 1.9f, 0.58f, 0.84f));
 	DrawCenteredText(
@@ -598,7 +633,7 @@ void AEmberdeepHUD::DrawActionBar(const AEmberdeepCharacter* Character)
 			Character->GetCharacterLevel(), Character->GetGold()),
 		FLinearColor(1.0f, 0.66f, 0.16f),
 		Canvas->ClipX * 0.5f,
-		HudY + 309.0f * Scale,
+		HudY + 382.0f * Scale,
 		GEngine->GetSmallFont(),
 		FMath::Clamp(Scale * 1.75f, 0.56f, 0.82f));
 }

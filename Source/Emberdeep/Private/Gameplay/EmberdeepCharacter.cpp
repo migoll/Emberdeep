@@ -1193,7 +1193,8 @@ void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& Attack
 	}
 	else
 	{
-		BasicComboStep = Now - LastBasicAttackTime > 0.82f ? 0 : (BasicComboStep + 1) % 3;
+		const float ComboResetWindow = FMath::Max(0.82f, GetAttackDuration(false) + 0.45f);
+		BasicComboStep = Now - LastBasicAttackTime > ComboResetWindow ? 0 : (BasicComboStep + 1) % 3;
 		LastBasicAttackTime = Now;
 		ComboStep = BasicComboStep;
 	}
@@ -1206,7 +1207,7 @@ void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& Attack
 	const float Radius = bHeavyAttack ? 155.0f : bComboFinisher ? 126.0f : 105.0f;
 	const float Reach = bHeavyAttack ? 125.0f : bComboFinisher ? 120.0f : 105.0f;
 	const float KnockbackStrength = bHeavyAttack ? 620.0f : bComboFinisher ? 410.0f : 260.0f;
-	const float Cooldown = bHeavyAttack ? HeavyAttackCooldown : bComboFinisher ? 0.50f : BasicAttackCooldown;
+	const float AttackDuration = GetAttackDuration(bHeavyAttack);
 	const FVector SafeAttackDirection = AttackDirection.GetSafeNormal2D();
 	if (SafeAttackDirection.IsNearlyZero())
 	{
@@ -1217,12 +1218,47 @@ void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& Attack
 	{
 		bBasicAttackQueued = false;
 	}
-	NextAttackTime = Now + Cooldown;
+	NextAttackTime = Now + AttackDuration;
 	ReplicatedAimDirection = SafeAttackDirection;
 	SetActorRotation(SafeAttackDirection.Rotation());
 	LaunchCharacter(SafeAttackDirection * (bHeavyAttack ? 145.0f : 85.0f), false, false);
+	PendingAttackDirection = SafeAttackDirection;
+	PendingAttackDamage = Damage;
+	PendingAttackRadius = Radius;
+	PendingAttackReach = Reach;
+	PendingAttackKnockbackStrength = KnockbackStrength;
+	PendingAttackComboStep = ComboStep;
+	bPendingAttack = true;
+	bPendingHeavyAttack = bHeavyAttack;
+	MulticastPlayAttackVisual(bHeavyAttack, ComboStep, AttackDuration);
 
-	const FVector AttackCenter = GetActorLocation() + SafeAttackDirection * Reach;
+	const float HitNormalizedTime = bHeavyAttack
+		? HeavyAttackHitNormalizedTime
+		: BasicAttackHitNormalizedTime;
+	GetWorldTimerManager().SetTimer(
+		PendingAttackTimer,
+		this,
+		&AEmberdeepCharacter::ResolvePendingAttack,
+		FMath::Max(0.01f, AttackDuration * HitNormalizedTime),
+		false);
+
+	UE_LOG(LogEmberdeep, Display,
+		TEXT("EMBERDEEP_COMBAT FighterAttackStarted Type=%s Duration=%.3f HitAt=%.3f AttackSpeed=%.2f"),
+		bHeavyAttack ? TEXT("Heavy") : TEXT("Basic"),
+		AttackDuration,
+		AttackDuration * HitNormalizedTime,
+		GetAttackSpeedMultiplier());
+}
+
+void AEmberdeepCharacter::ResolvePendingAttack()
+{
+	if (!HasAuthority() || !bPendingAttack || IsDead())
+	{
+		bPendingAttack = false;
+		return;
+	}
+
+	const FVector AttackCenter = GetActorLocation() + PendingAttackDirection * PendingAttackReach;
 	FCollisionObjectQueryParams ObjectQuery;
 	ObjectQuery.AddObjectTypesToQuery(ECC_Pawn);
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EmberdeepMeleeAttack), false, this);
@@ -1233,7 +1269,7 @@ void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& Attack
 		AttackCenter,
 		FQuat::Identity,
 		ObjectQuery,
-		FCollisionShape::MakeSphere(Radius),
+		FCollisionShape::MakeSphere(PendingAttackRadius),
 		QueryParams);
 
 	TSet<AActor*> DamagedActors;
@@ -1247,23 +1283,40 @@ void AEmberdeepCharacter::ExecuteAttack(bool bHeavyAttack, const FVector& Attack
 
 		DamagedActors.Add(Target);
 		FPointDamageEvent DamageEvent;
-		DamageEvent.Damage = Damage;
-		DamageEvent.ShotDirection = SafeAttackDirection * KnockbackStrength;
-		Target->TakeDamage(Damage, DamageEvent, GetController(), this);
+		DamageEvent.Damage = PendingAttackDamage;
+		DamageEvent.ShotDirection = PendingAttackDirection * PendingAttackKnockbackStrength;
+		Target->TakeDamage(PendingAttackDamage, DamageEvent, GetController(), this);
 	}
-	MulticastPlayAttackVisual(bHeavyAttack, DamagedActors.Num(), ComboStep);
+	MulticastPlayAttackImpact(bPendingHeavyAttack, DamagedActors.Num(), PendingAttackComboStep);
 
-	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_COMBAT FighterAttack Type=%s Damage=%.0f Hits=%d"),
-		bHeavyAttack ? TEXT("Heavy") : TEXT("Basic"), Damage, DamagedActors.Num());
+	UE_LOG(LogEmberdeep, Display, TEXT("EMBERDEEP_COMBAT FighterAttackResolved Type=%s Damage=%.0f Hits=%d"),
+		bPendingHeavyAttack ? TEXT("Heavy") : TEXT("Basic"), PendingAttackDamage, DamagedActors.Num());
+	bPendingAttack = false;
 }
 
-void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack, int32 HitCount, int32 ComboStep)
+float AEmberdeepCharacter::GetAttackClipDuration(bool bHeavyAttack) const
 {
-	const bool bComboFinisher = !bHeavyAttack && ComboStep == 2;
-	const float SwingDuration = bHeavyAttack ? 0.34f : bComboFinisher ? 0.28f : 0.22f;
+	const int32 ClipIndex = bHeavyAttack
+		? FighterVoxelData::GPlayableHeavyAttackClipIndex
+		: FighterVoxelData::GPlayableBasicAttackClipIndex;
+	if (GFighterLiveSync.bReady && GFighterLiveSync.Animations.IsValidIndex(ClipIndex))
+	{
+		return FMath::Max(0.05f, GFighterLiveSync.Animations[ClipIndex].Duration);
+	}
+	return FMath::Max(0.05f, FighterVoxelData::GPlayableAnimationClips[ClipIndex].Duration);
+}
+
+float AEmberdeepCharacter::GetAttackDuration(bool bHeavyAttack) const
+{
+	return GetAttackClipDuration(bHeavyAttack) / GetAttackSpeedMultiplier();
+}
+
+void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack, int32 ComboStep, float AttackDuration)
+{
+	const float SwingDuration = FMath::Max(0.05f, AttackDuration);
 	if (!bHeavyAttack)
 	{
-		BasicAttackCooldownVisualEndTime = GetWorld()->GetTimeSeconds() + GetBasicAttackInterval();
+		BasicAttackCooldownVisualEndTime = GetWorld()->GetTimeSeconds() + SwingDuration;
 		BasicAttackFeedbackStartTime = GetWorld()->GetTimeSeconds();
 	}
 	VisualAttackStartTime = GetWorld()->GetTimeSeconds();
@@ -1272,7 +1325,22 @@ void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack, int32 HitCount, in
 	VisualComboStep = ComboStep;
 	++AttackVisualSequence;
 	ApplySteppedVisualPose(true);
+	bThorgrimHeavyAttack = bHeavyAttack;
+	ThorgrimAttackDuration = SwingDuration;
+	ThorgrimAttackTimeRemaining = SwingDuration;
+	ThorgrimPoseAccumulator = 1.0f;
+	GetWorldTimerManager().ClearTimer(AttackVisualTimer);
+	GetWorldTimerManager().SetTimer(
+		AttackVisualTimer,
+		this,
+		&AEmberdeepCharacter::ResetAttackVisual,
+		SwingDuration,
+		false);
+}
 
+void AEmberdeepCharacter::PlayAttackImpact(bool bHeavyAttack, int32 HitCount, int32 ComboStep)
+{
+	const bool bComboFinisher = !bHeavyAttack && ComboStep == 2;
 	const FVector Forward = GetActorForwardVector().GetSafeNormal2D();
 	AEmberdeepCombatFeedback::SpawnSwing(
 		GetWorld(),
@@ -1284,12 +1352,6 @@ void AEmberdeepCharacter::PlayAttackVisual(bool bHeavyAttack, int32 HitCount, in
 	{
 		StartLocalCameraShake(bHeavyAttack ? 8.5f : 4.5f, bHeavyAttack ? 0.19f : 0.11f);
 	}
-	bThorgrimHeavyAttack = bHeavyAttack;
-	ThorgrimAttackDuration = SwingDuration;
-	ThorgrimAttackTimeRemaining = SwingDuration;
-	ThorgrimPoseAccumulator = 1.0f;
-	FTimerHandle VisualTimer;
-	GetWorldTimerManager().SetTimer(VisualTimer, this, &AEmberdeepCharacter::ResetAttackVisual, SwingDuration, false);
 }
 
 void AEmberdeepCharacter::UpdateThorgrimAnimation(float DeltaSeconds)
@@ -1558,10 +1620,18 @@ void AEmberdeepCharacter::ServerSetBasicAttackHeld_Implementation(
 
 void AEmberdeepCharacter::MulticastPlayAttackVisual_Implementation(
 	bool bHeavyAttack,
+	int32 ComboStep,
+	float AttackDuration)
+{
+	PlayAttackVisual(bHeavyAttack, ComboStep, AttackDuration);
+}
+
+void AEmberdeepCharacter::MulticastPlayAttackImpact_Implementation(
+	bool bHeavyAttack,
 	int32 HitCount,
 	int32 ComboStep)
 {
-	PlayAttackVisual(bHeavyAttack, HitCount, ComboStep);
+	PlayAttackImpact(bHeavyAttack, HitCount, ComboStep);
 }
 
 void AEmberdeepCharacter::MulticastPlayDodgeVisual_Implementation(FVector_NetQuantizeNormal DodgeDirection)
@@ -1587,6 +1657,7 @@ void AEmberdeepCharacter::OnRep_AimDirection()
 
 void AEmberdeepCharacter::ResetAttackVisual()
 {
+	GetWorldTimerManager().ClearTimer(AttackVisualTimer);
 	VisualAttackStartTime = -100.0f;
 	VisualAttackDuration = 0.0f;
 	ApplySteppedVisualPose(true);
@@ -1807,7 +1878,13 @@ float AEmberdeepCharacter::GetBasicAttackCooldownNormalized() const
 
 float AEmberdeepCharacter::GetBasicAttacksPerSecond() const
 {
-	return BasicAttackCooldown > KINDA_SMALL_NUMBER ? 1.0f / BasicAttackCooldown : 0.0f;
+	const float AttackInterval = GetBasicAttackInterval();
+	return AttackInterval > KINDA_SMALL_NUMBER ? 1.0f / AttackInterval : 0.0f;
+}
+
+float AEmberdeepCharacter::GetAttackSpeedMultiplier() const
+{
+	return FMath::Clamp(AttackSpeedMultiplier, 0.25f, 3.0f);
 }
 
 bool AEmberdeepCharacter::IsBasicAttackQueued() const
@@ -1817,7 +1894,7 @@ bool AEmberdeepCharacter::IsBasicAttackQueued() const
 
 float AEmberdeepCharacter::GetBasicAttackInterval() const
 {
-	return FMath::Max(BasicAttackCooldown, KINDA_SMALL_NUMBER);
+	return FMath::Max(GetAttackDuration(false), KINDA_SMALL_NUMBER);
 }
 
 float AEmberdeepCharacter::GetBasicAttackFeedbackNormalized() const
@@ -1846,6 +1923,8 @@ void AEmberdeepCharacter::HandleDeath()
 	ApplySteppedVisualPose(true);
 	bBasicAttackHeld = false;
 	bBasicAttackQueued = false;
+	bPendingAttack = false;
+	GetWorldTimerManager().ClearTimer(PendingAttackTimer);
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	if (HasAuthority())

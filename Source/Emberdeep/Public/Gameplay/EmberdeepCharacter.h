@@ -58,6 +58,9 @@ public:
 	float GetBasicAttacksPerSecond() const;
 
 	UFUNCTION(BlueprintPure, Category = "Combat")
+	float GetAttackSpeedMultiplier() const;
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
 	bool IsBasicAttackQueued() const;
 
 	UFUNCTION(BlueprintPure, Category = "Combat")
@@ -81,7 +84,11 @@ private:
 	void PollLiveSyncData();
 	void RequestAttack(bool bHeavyAttack);
 	void ExecuteAttack(bool bHeavyAttack, const FVector& AttackDirection);
-	void PlayAttackVisual(bool bHeavyAttack, int32 HitCount, int32 ComboStep);
+	void ResolvePendingAttack();
+	float GetAttackClipDuration(bool bHeavyAttack) const;
+	float GetAttackDuration(bool bHeavyAttack) const;
+	void PlayAttackVisual(bool bHeavyAttack, int32 ComboStep, float AttackDuration);
+	void PlayAttackImpact(bool bHeavyAttack, int32 HitCount, int32 ComboStep);
 	void PlayHurtVisual(float Damage, bool bFatal);
 	void StartLocalCameraShake(float Strength, float Duration);
 	void UpdateLocalCameraShake(float DeltaSeconds);
@@ -105,7 +112,10 @@ private:
 	void ServerSetBasicAttackHeld(bool bHeld, FVector_NetQuantizeNormal RequestedAimDirection);
 
 	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastPlayAttackVisual(bool bHeavyAttack, int32 HitCount, int32 ComboStep);
+	void MulticastPlayAttackVisual(bool bHeavyAttack, int32 ComboStep, float AttackDuration);
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayAttackImpact(bool bHeavyAttack, int32 HitCount, int32 ComboStep);
 
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayDodgeVisual(FVector_NetQuantizeNormal DodgeDirection);
@@ -156,11 +166,16 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<UEmberdeepHealthComponent> HealthComponent;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Combat")
-	float BasicAttackCooldown = 0.38f;
+	// Blockbench supplies the base duration. Future equipment and buffs modify
+	// this single scalar so animation, hit frame, and recovery stay aligned.
+	UPROPERTY(EditDefaultsOnly, Category = "Combat", meta = (ClampMin = "0.25", ClampMax = "3.0"))
+	float AttackSpeedMultiplier = 1.0f;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Combat")
-	float HeavyAttackCooldown = 1.15f;
+	UPROPERTY(EditDefaultsOnly, Category = "Combat", meta = (ClampMin = "0.05", ClampMax = "0.95"))
+	float BasicAttackHitNormalizedTime = 0.40f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Combat", meta = (ClampMin = "0.05", ClampMax = "0.95"))
+	float HeavyAttackHitNormalizedTime = 0.50f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Combat")
 	float DodgeCooldown = 1.0f;
@@ -225,6 +240,16 @@ private:
 	float ThorgrimAttackDuration = 0.0f;
 	float ThorgrimDodgeTimeRemaining = 0.0f;
 	float ThorgrimDodgeDuration = 0.28f;
+	FTimerHandle PendingAttackTimer;
+	FTimerHandle AttackVisualTimer;
+	FVector PendingAttackDirection = FVector::ForwardVector;
+	float PendingAttackDamage = 0.0f;
+	float PendingAttackRadius = 0.0f;
+	float PendingAttackReach = 0.0f;
+	float PendingAttackKnockbackStrength = 0.0f;
+	int32 PendingAttackComboStep = INDEX_NONE;
+	bool bPendingAttack = false;
+	bool bPendingHeavyAttack = false;
 	bool bThorgrimHeavyAttack = false;
 	bool bUsingThorgrimVisual = false;
 	int32 AppliedLiveSyncRevision = INDEX_NONE;

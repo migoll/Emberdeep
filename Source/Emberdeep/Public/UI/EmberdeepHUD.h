@@ -39,7 +39,7 @@ private:
 	TObjectPtr<UTexture2D> HudOrnaments;
 
 	UPROPERTY()
-	TObjectPtr<UTexture2D> ConnectedCombatHud;
+	TObjectPtr<UTexture2D> FighterActionBarFrame;
 
 	UPROPERTY()
 	TObjectPtr<UTexture2D> PartyRowFrame;
@@ -48,5 +48,14 @@ private:
 	TObjectPtr<UTexture2D> MinimapFrame;
 
 	UPROPERTY()
-	TObjectPtr<UTexture2D> FighterAbilityAtlas;
+	TObjectPtr<UTexture2D> FighterChargeIcon;
+
+	UPROPERTY()
+	TObjectPtr<UTexture2D> FighterAxeStrikeIcon;
+
+	UPROPERTY()
+	TObjectPtr<UTexture2D> FighterShieldSlamIcon;
+
+	UPROPERTY()
+	TObjectPtr<UTexture2D> FighterWhirlwindIcon;
 };

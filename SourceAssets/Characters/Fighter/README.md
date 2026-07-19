@@ -16,8 +16,8 @@ close presentation sheet.
 
 `fighter_v0.bbmodel` is the editable source of truth. Double-click
 `OPEN_IN_BLOCKBENCH.cmd`, edit in Blockbench's **Edit** mode, and use **File >
-Save Project**. If Ctrl+S asks for a PNG, the texture is selected; click the 3D
-viewport or Outliner first and then save the project.
+Save Project**. In this setup, use Ctrl+Alt+S to save the `.bbmodel`; Ctrl+S may
+instead open Blockbench's PNG texture export.
 
 Editing rules enforced by the converter:
 
@@ -41,7 +41,7 @@ and animation data, and builds the Unreal editor target.
 
 For live editing, double-click `LIVE_SYNC_TO_GAME.cmd` once. Leave its
 PowerShell window open, edit either **Edit** or **Animate** in Blockbench, and
-save the `.bbmodel` project with Ctrl+S. The open game updates in roughly a
+save the `.bbmodel` project with Ctrl+Alt+S. The open game updates in roughly a
 quarter of a second; no Unreal rebuild or manual sync is needed. Live Sync also
 watches all weapon and shield `.bbmodel` files under `SourceAssets/Equipment`.
 
@@ -59,6 +59,12 @@ Open the **Animate** workspace at the top-right. The timeline's animation menu
 contains `Idle`, `Walk`, `BasicAttack`, `HeavyAttack`, and `Dodge`. Select a rig
 group in the Outliner, move the playhead, then use the rotation or position
 keyframe buttons. Play the clip with the timeline play button.
+
+The authored `BasicAttack` and `HeavyAttack` clip lengths are their real base
+durations in game. At 1.0x attack speed, a 1.0-second Blockbench clip takes one
+second in Unreal. Attack speed scales the full clip, its server-authoritative
+hit frame, and the interval before the next attack together. Basic attacks land
+40% through the clip; heavy attacks land 50% through the clip.
 
 The converter samples these clips at 12 poses per second when
 `SYNC_TO_GAME.cmd` runs. It currently accepts ordinary numeric position and

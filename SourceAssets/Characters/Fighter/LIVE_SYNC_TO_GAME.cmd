@@ -17,5 +17,5 @@ if errorlevel 1 (
     start "Emberdeep" "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "%~dp0..\..\..\Emberdeep.uproject" -game -windowed -ResX=1280 -ResY=720 -log
 )
 
-echo Live Sync started. Keep its PowerShell window open and save in Blockbench with Ctrl+S.
+echo Live Sync started. Keep its PowerShell window open and save in Blockbench with Ctrl+Alt+S.
 exit /b 0

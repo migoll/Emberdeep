@@ -419,12 +419,39 @@ def generate(check: bool) -> None:
         OUTPUT_PATH.write_bytes(content)
 
 
+def set_clip_duration(clip_name: str, duration: float) -> None:
+    if duration <= 0:
+        raise SystemExit("Clip duration must be greater than zero")
+    document = json.loads(MODEL_PATH.read_text(encoding="utf-8"))
+    clip = next(
+        (candidate for candidate in document.get("animations", []) if candidate.get("name") == clip_name),
+        None,
+    )
+    if clip is None:
+        raise SystemExit(f"Animation clip not found: {clip_name}")
+    latest_keyframe = max(
+        (
+            number(keyframe.get("time", 0), f"{clip_name} keyframe time")
+            for track in clip.get("animators", {}).values()
+            for keyframe in track.get("keyframes", [])
+        ),
+        default=0.0,
+    )
+    if latest_keyframe > duration + 1e-6:
+        raise SystemExit(
+            f"{clip_name} has a keyframe at {latest_keyframe:.5f}s beyond the requested {duration:.5f}s"
+        )
+    clip["length"] = duration
+    MODEL_PATH.write_text(json.dumps(document, separators=(",", ":")), encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--migrate", action="store_true")
     parser.add_argument("--parent-equipment", action="store_true")
     parser.add_argument("--upgrade-sample-rates", action="store_true")
     parser.add_argument("--generic-anchors", action="store_true")
+    parser.add_argument("--set-clip-duration", nargs=2, metavar=("CLIP", "SECONDS"))
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     if args.migrate:
@@ -435,6 +462,8 @@ def main() -> None:
         upgrade_sample_rates()
     if args.generic_anchors:
         use_generic_anchor_names()
+    if args.set_clip_duration:
+        set_clip_duration(args.set_clip_duration[0], float(args.set_clip_duration[1]))
     generate(args.check)
     print("Generated Unreal animation data from Blockbench clips")
 

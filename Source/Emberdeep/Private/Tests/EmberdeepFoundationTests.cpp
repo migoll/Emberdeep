@@ -124,6 +124,9 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 		TEXT("Attack presentation must multicast to the party"),
 		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("MulticastPlayAttackVisual")));
 	TestNotNull(
+		TEXT("Authoritative attack impacts must multicast at the authored hit frame"),
+		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("MulticastPlayAttackImpact")));
+	TestNotNull(
 		TEXT("Dodge presentation must multicast to the party"),
 		AEmberdeepCharacter::StaticClass()->FindFunctionByName(TEXT("MulticastPlayDodgeVisual")));
 	TestNotNull(
@@ -137,6 +140,7 @@ bool FEmberdeepFoundationClassesTest::RunTest(const FString& Parameters)
 		AEmberdeepEnemy::StaticClass()->FindFunctionByName(TEXT("MulticastSetAttackTelegraph")));
 
 	const AEmberdeepCharacter* CharacterDefault = AEmberdeepCharacter::StaticClass()->GetDefaultObject<AEmberdeepCharacter>();
+	TestEqual(TEXT("Characters start at authored 1x attack speed"), CharacterDefault->GetAttackSpeedMultiplier(), 1.0f);
 	TestEqual(TEXT("Characters begin at level one"), CharacterDefault->GetCharacterLevel(), 1);
 	TestEqual(TEXT("Characters begin with an empty XP bar"), CharacterDefault->GetExperienceNormalized(), 0.0f);
 	TArray<UInstancedStaticMeshComponent*> CharacterPaletteMeshes;
